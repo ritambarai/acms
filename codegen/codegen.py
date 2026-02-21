@@ -106,7 +106,7 @@ def parse_xsd(xsd_path):
 #  JS GENERATORS (unchanged)
 # ═══════════════════════════════════════════════════════
 
-def gen_schema_js(tables):
+def gen_schema_js(tables, settings_subcats=None):
     js = ""
     for t, fields in tables.items():
         js += f"var {t}_SCHEMA = [\n"
@@ -118,6 +118,18 @@ def gen_schema_js(tables):
 
     names = ", ".join(f'"{t}"' for t in tables)
     js += f"var TABLE_LIST = [{names}];\n"
+
+    if settings_subcats:
+        other = {k: v for k, v in settings_subcats.items() if k != "headers"}
+        if other:
+            js += "\nvar Settings_SUBCATS = {\n"
+            items = []
+            for sc_name, sc_fields in other.items():
+                fields_str = ", ".join(f'"{f}"' for f in sc_fields)
+                items.append(f'  {sc_name}: [{fields_str}]')
+            js += ",\n".join(items)
+            js += "\n};\n"
+
     return js
 
 
@@ -571,7 +583,7 @@ def c_ident(name):
     return name.replace(" ", "_").replace("-", "_")
 
 
-def _gen_subcat_block(lines, t, subcat_name, subcat_fields, field_map, has_value_ptr=False):
+def _gen_subcat_block(lines, t, subcat_name, subcat_fields, field_map, has_value_ptr=False, max_rows=MAX_ROWS, has_constraint_id=False):
     """Generate enum, struct, table for one subcategory of a table."""
     tl = t.lower()
     tu = t.upper()
@@ -617,11 +629,13 @@ def _gen_subcat_block(lines, t, subcat_name, subcat_fields, field_map, has_value
         lines.append(f"  {c_type} {ci};")
     if has_value_ptr:
         lines.append(f"  float *value_ptr;   /* points to description struct Value field */")
+    if has_constraint_id:
+        lines.append(f"  int constraint_id;   /* index into constraints table, -1 if no constraints row */")
     lines.append(f"}} {prefix}_row_t;")
     lines.append("")
 
     # ── max rows ──
-    lines.append(f"#define MAX_{PREFIX}_ROWS {MAX_ROWS}")
+    lines.append(f"#define MAX_{PREFIX}_ROWS {max_rows}")
     lines.append("")
 
     # ── table struct ──
@@ -671,7 +685,7 @@ def _gen_subcat_block(lines, t, subcat_name, subcat_fields, field_map, has_value
     lines.append("")
 
 
-def gen_c_schema_h(tables, subcategories=None):
+def gen_c_schema_h(tables, subcategories=None, settings_subcats=None, settings_fields=None, max_rows=MAX_ROWS):
     """Generate schema.h — enums, structs, column arrays, validation."""
     if subcategories is None:
         subcategories = {}
@@ -701,9 +715,10 @@ def gen_c_schema_h(tables, subcategories=None):
             for sc_name in subcat_names:
                 sc_fields = subcats[sc_name]
                 has_value_ptr = sc_name.lower() in ("modbus", "constraints")
+                has_constraint_id = "Value" in subcats[sc_name]
                 lines.append(f"/* ─── {t} / {sc_name} ─── */")
                 lines.append("")
-                _gen_subcat_block(lines, t, sc_name, sc_fields, field_map, has_value_ptr)
+                _gen_subcat_block(lines, t, sc_name, sc_fields, field_map, has_value_ptr, max_rows, has_constraint_id)
         else:
             # No subcategories — flat struct (original behaviour)
             n_cols = len(fields)
@@ -738,7 +753,7 @@ def gen_c_schema_h(tables, subcategories=None):
             lines.append(f"}} {tl}_row_t;")
             lines.append("")
 
-            lines.append(f"#define MAX_{tu}_ROWS {MAX_ROWS}")
+            lines.append(f"#define MAX_{tu}_ROWS {max_rows}")
             lines.append("")
 
             lines.append(f"typedef struct {{")
@@ -784,10 +799,49 @@ def gen_c_schema_h(tables, subcategories=None):
             lines.append("")
             lines.append("")
 
+    # ── Settings: singleton structs (one per subcategory, no rows[] array) ──
+    if settings_subcats and settings_fields:
+        field_map_s = {n: typ for n, typ in settings_fields}
+        other_subcats_s = {k: v for k, v in settings_subcats.items() if k != "headers"}
+        if other_subcats_s:
+            lines.append("/* ═══════ Settings ═══════ */")
+            lines.append("")
+            for sc_name, sc_fields in other_subcats_s.items():
+                sl = sc_name.lower()
+                lines.append(f"/* ─── Settings / {sc_name} ─── */")
+                lines.append("")
+                lines.append("typedef struct {")
+                for fn in sc_fields:
+                    typ = field_map_s.get(fn, "string")
+                    c_type = C_TYPE_MAP.get(typ, "char*")
+                    ci = c_ident(fn)
+                    lines.append(f"  {c_type} {ci};")
+                lines.append(f"}} settings_{sl}_t;")
+                lines.append("")
+                lines.append(f"extern settings_{sl}_t settings_{sl};")
+                lines.append("")
+                lines.append("")
+
+            # ── Pool-size accessors: default to 32 / 128 when struct value is 0 ──
+            schema_fields = other_subcats_s.get("schema", [])
+            if "Var_Pool_Size" in schema_fields or "Class_Pool_Size" in schema_fields:
+                lines.append("/* ── Runtime pool-size accessors (defaults when struct value is 0) ── */")
+                lines.append("")
+                if "Var_Pool_Size" in schema_fields:
+                    lines.append("static inline int32_t effective_var_pool_size(void) {")
+                    lines.append("  return settings_schema.Var_Pool_Size > 0 ? settings_schema.Var_Pool_Size : 128;")
+                    lines.append("}")
+                    lines.append("")
+                if "Class_Pool_Size" in schema_fields:
+                    lines.append("static inline int32_t effective_class_pool_size(void) {")
+                    lines.append("  return settings_schema.Class_Pool_Size > 0 ? settings_schema.Class_Pool_Size : 32;")
+                    lines.append("}")
+                    lines.append("")
+
     return "\n".join(lines)
 
 
-def _gen_field_extract(lines, name, typ, prefix, PREFIX, tbl_var):
+def _gen_field_extract(lines, name, typ, prefix, PREFIX, tbl_var, idx="count"):
     """Generate extract + assign for one field inside a parse loop."""
     ci = c_ident(name)
     ci_upper = ci.upper()
@@ -799,18 +853,19 @@ def _gen_field_extract(lines, name, typ, prefix, PREFIX, tbl_var):
     lines.append(f"    }}")
 
     if typ in C_NUMERIC_TYPES:
-        lines.append(f"    {tbl_var}->rows[count].{ci} = buf[0] ? (float)atof(buf) : -9999.0f;")
+        lines.append(f"    {tbl_var}->rows[{idx}].{ci} = buf[0] ? (float)atof(buf) : -9999.0f;")
     elif typ in C_INT_TYPES:
         int_c = C_TYPE_MAP[typ]
-        lines.append(f"    {tbl_var}->rows[count].{ci} = buf[0] ? ({int_c})strtol(buf, NULL, 10) : 0;")
+        lines.append(f"    {tbl_var}->rows[{idx}].{ci} = buf[0] ? ({int_c})strtol(buf, NULL, 10) : 0;")
     elif typ == "boolean":
-        lines.append(f'    {tbl_var}->rows[count].{ci} = (strcmp(buf, "true") == 0);')
+        lines.append(f'    {tbl_var}->rows[{idx}].{ci} = (strcmp(buf, "true") == 0);')
     else:  # string
-        lines.append(f"    {tbl_var}->rows[count].{ci} = buf[0] ? strdup(buf) : NULL;")
+        lines.append(f"    {tbl_var}->rows[{idx}].{ci} = buf[0] ? strdup(buf) : NULL;")
     lines.append("")
 
 
-def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=None):
+def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=None,
+                     settings_subcats=None, settings_fields=None):
     """Generate xml_parser.c — SPIFFS XML parsing and struct population."""
     if subcategories is None:
         subcategories = {}
@@ -844,6 +899,24 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                 lines.append(f"{prefix}_table_t {prefix}_table = {{ .count = 0, .version = 0 }};")
         else:
             lines.append(f"{tl}_table_t {tl}_table = {{ .count = 0, .version = 0 }};")
+
+    # ── Settings singleton global instances ──
+    if settings_subcats and settings_fields:
+        field_map_s = {n: typ for n, typ in settings_fields}
+        other_subcats_s = {k: v for k, v in settings_subcats.items() if k != "headers"}
+        for sc_name, sc_fields in other_subcats_s.items():
+            sl = sc_name.lower()
+            inits = []
+            for fn in sc_fields:
+                typ = field_map_s.get(fn, "string")
+                if typ == "string":
+                    inits.append("NULL")
+                elif typ == "boolean":
+                    inits.append("false")
+                else:
+                    inits.append("0")
+            lines.append(f"settings_{sl}_t settings_{sl} = {{ {', '.join(inits)} }};")
+
     lines.append("")
 
     # ── helper: extract tag value from a <row> fragment ──
@@ -880,10 +953,14 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
             field_map = {n: typ for n, typ in fields}
             subcat_names = list(subcats.keys())
 
-            # Use the first subcat's MAX for the shared row limit
-            first_prefix = f"{tu}_{subcat_names[0].upper()}"
+            # Identify source subcat (has "Value") and optional subcats (have value_ptr)
+            src_sc = next((s for s in subcat_names if "Value" in subcats[s]), None)
+            optional_scs = [s for s in subcat_names if s.lower() in ("constraints", "modbus")]
+            has_optional = bool(optional_scs) and src_sc is not None
+            src_sl = src_sc.lower() if src_sc else subcat_names[0].lower()
+            src_PREFIX = f"{tu}_{src_sc.upper()}" if src_sc else f"{tu}_{subcat_names[0].upper()}"
 
-            # ── single parse function that populates all subcat tables ──
+            # ── parse function that populates all subcat tables ──
             lines.append(f"/* ═══════ {t}: parse XML → {', '.join(tl + '_' + s.lower() for s in subcat_names)} tables ═══════ */")
 
             # Function signature: takes pointers to all subcat tables
@@ -892,52 +969,126 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                 for sc in subcat_names
             )
             lines.append(f"static int parse_{tl}_xml(const char *xml, {params}) {{")
-            lines.append("  int count = 0;")
+
+            if has_optional:
+                lines.append(f"  int {src_sl}_count = 0;")
+                for osc in optional_scs:
+                    lines.append(f"  int {osc.lower()}_count = 0;")
+            else:
+                lines.append("  int count = 0;")
+
             lines.append("  const char *pos = xml;")
             lines.append("  char buf[256];")
             lines.append("")
-            lines.append(f"  while (count < MAX_{first_prefix}_ROWS) {{")
+
+            if has_optional:
+                lines.append(f"  while ({src_sl}_count < MAX_{src_PREFIX}_ROWS) {{")
+            else:
+                lines.append(f"  while (count < MAX_{src_PREFIX}_ROWS) {{")
+
             lines.append('    const char *row_start = strstr(pos, "<row>");')
             lines.append("    if (!row_start) break;")
             lines.append('    const char *row_end = strstr(row_start, "</row>");')
             lines.append("    if (!row_end) break;")
             lines.append("")
 
-            # Extract fields for each subcategory
-            for sc_name in subcat_names:
-                sl = sc_name.lower()
-                su = sc_name.upper()
+            if has_optional:
+                # Source subcat fields — use src_sl_count as index
+                sl = src_sc.lower()
                 prefix = f"{tl}_{sl}"
-                PREFIX = f"{tu}_{su}"
+                PREFIX = f"{tu}_{src_sc.upper()}"
                 tbl_var = f"{sl}_tbl"
-
-                lines.append(f"    /* ── {sc_name} ── */")
-                for fn in subcats[sc_name]:
+                lines.append(f"    /* ── {src_sc} ── */")
+                for fn in subcats[src_sc]:
                     typ = field_map[fn]
-                    _gen_field_extract(lines, fn, typ, prefix, PREFIX, tbl_var)
+                    _gen_field_extract(lines, fn, typ, prefix, PREFIX, tbl_var, idx=f"{src_sl}_count")
 
-            # Link modbus value_ptr to values struct's Value field
-            # Find the source subcat that owns the "Value" field (e.g. description)
-            src_sc = next((s for s in subcat_names if "Value" in subcats[s]), None)
-            if src_sc:
-                src_sl = src_sc.lower()
-                for sc in subcat_names:
-                    if sc.lower() in ("modbus", "constraints"):
-                        sl = sc.lower()
-                        lines.append(f"    /* link {sl} value_ptr → {src_sl}.Value */")
-                        lines.append(f"    {sl}_tbl->rows[count].value_ptr = &{src_sl}_tbl->rows[count].Value;")
+                # Optional subcats — temp vars then conditional commit
+                for osc in optional_scs:
+                    osl = osc.lower()
+                    osu = osc.upper()
+                    prefix_o = f"{tl}_{osl}"
+                    PREFIX_O = f"{tu}_{osu}"
+                    ofields = [(fn, field_map[fn]) for fn in subcats[osc]]
+                    numeric_fields = [(fn, typ) for fn, typ in ofields if typ in C_NUMERIC_TYPES]
+                    temp_vars = [(c_ident(fn), f"_t_{c_ident(fn)}") for fn, _ in numeric_fields]
+
+                    lines.append(f"    /* ── {osc}: parse into temporaries, commit only if any field is non-default ── */")
+                    if temp_vars:
+                        lines.append(f"    float {', '.join(tv for _, tv in temp_vars)};")
+                    lines.append("")
+
+                    for fn, typ in ofields:
+                        ci = c_ident(fn)
+                        ci_upper = ci.upper()
+                        enum_val = f"COL_{PREFIX_O}_{ci_upper}_{typ.upper()}"
+                        temp = f"_t_{ci}"
+                        lines.append(f'    extract_tag(row_start, "{ci}", buf, sizeof(buf));')
+                        lines.append(f"    if (buf[0] && !validate_{prefix_o}_value({enum_val}, buf)) {{")
+                        lines.append(f"      pos = row_end + 6; continue;")
+                        lines.append(f"    }}")
+                        if typ in C_NUMERIC_TYPES:
+                            lines.append(f"    {temp} = buf[0] ? (float)atof(buf) : -9999.0f;")
+                        lines.append("")
+
+                    if temp_vars:
+                        cond = " || ".join(f"{tv} != -9999.0f" for _, tv in temp_vars)
+                        lines.append(f"    if ({cond}) {{")
+                        lines.append(f"      /* at least one {osc} field is real — commit this row */")
+                        for fn, typ in ofields:
+                            if typ in C_NUMERIC_TYPES:
+                                ci = c_ident(fn)
+                                temp = f"_t_{ci}"
+                                lines.append(f"      {osl}_tbl->rows[{osl}_count].{ci} = {temp};")
+                        lines.append(f"      {osl}_tbl->rows[{osl}_count].value_ptr = &{src_sl}_tbl->rows[{src_sl}_count].Value;")
+                        if "constraint" in osl:
+                            lines.append(f"      {src_sl}_tbl->rows[{src_sl}_count].constraint_id = {osl}_count;")
+                        lines.append(f"      {osl}_count++;")
+                        lines.append("    } else {")
+                        if "constraint" in osl:
+                            lines.append(f"      {src_sl}_tbl->rows[{src_sl}_count].constraint_id = -1;")
+                        lines.append("    }")
+                        lines.append("")
+
+                lines.append(f"    {src_sl}_count++;")
+                lines.append("    pos = row_end + 6;")
+                lines.append("  }")
                 lines.append("")
+                lines.append(f"  {src_sl}_tbl->count = {src_sl}_count;")
+                for osc in optional_scs:
+                    osl = osc.lower()
+                    lines.append(f"  {osl}_tbl->count = {osl}_count;")
+                lines.append(f"  return {src_sl}_count;")
 
-            lines.append("    count++;")
-            lines.append("    pos = row_end + 6;")
-            lines.append("  }")
+            else:
+                # Original single-counter behaviour
+                for sc_name in subcat_names:
+                    sl = sc_name.lower()
+                    su = sc_name.upper()
+                    prefix = f"{tl}_{sl}"
+                    PREFIX = f"{tu}_{su}"
+                    tbl_var = f"{sl}_tbl"
+                    lines.append(f"    /* ── {sc_name} ── */")
+                    for fn in subcats[sc_name]:
+                        typ = field_map[fn]
+                        _gen_field_extract(lines, fn, typ, prefix, PREFIX, tbl_var)
 
-            # Set count on all subcat tables
-            for sc_name in subcat_names:
-                sl = sc_name.lower()
-                lines.append(f"  {sl}_tbl->count = count;")
+                if src_sc:
+                    for sc in subcat_names:
+                        if sc.lower() in ("modbus", "constraints"):
+                            sl = sc.lower()
+                            lines.append(f"    /* link {sl} value_ptr → {src_sl}.Value */")
+                            lines.append(f"    {sl}_tbl->rows[count].value_ptr = &{src_sl}_tbl->rows[count].Value;")
+                    lines.append("")
 
-            lines.append("  return count;")
+                lines.append("    count++;")
+                lines.append("    pos = row_end + 6;")
+                lines.append("  }")
+                for sc_name in subcat_names:
+                    sl = sc_name.lower()
+                    lines.append(f"  {sl}_tbl->count = count;")
+                lines.append("  return count;")
+
             lines.append("}")
             lines.append("")
 
@@ -1041,6 +1192,63 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
             lines.append("")
             lines.append("")
 
+    # ── Settings XML parser (one subcategory per row) ──
+    if settings_subcats and settings_fields:
+        field_map_s = {n: typ for n, typ in settings_fields}
+        other_subcats_s = {k: v for k, v in settings_subcats.items() if k != "headers"}
+        if other_subcats_s:
+            lines.append("/* ── parse Settings XML — one subcategory per row ── */")
+            lines.append("static void parse_settings_xml(const char *xml) {")
+            lines.append("  const char *pos = xml;")
+            lines.append("  char buf[256];")
+            lines.append("  while (1) {")
+            lines.append('    const char *row_start = strstr(pos, "<row>");')
+            lines.append("    if (!row_start) break;")
+            lines.append('    const char *row_end = strstr(row_start, "</row>");')
+            lines.append("    if (!row_end) break;")
+            lines.append("")
+
+            first = True
+            for sc_name, sc_fields in other_subcats_s.items():
+                sl = sc_name.lower()
+                cond = "if" if first else "else if"
+                first = False
+                lines.append(f"    /* ── {sc_name} ── */")
+                lines.append(f'    {cond} (strstr(row_start, "<{sl}>")) {{')
+                for fn in sc_fields:
+                    typ = field_map_s.get(fn, "string")
+                    ci = c_ident(fn)
+                    lines.append(f'      extract_tag(row_start, "{ci}", buf, sizeof(buf));')
+                    if typ == "string":
+                        lines.append(f"      if (settings_{sl}.{ci}) {{ free(settings_{sl}.{ci}); settings_{sl}.{ci} = NULL; }}")
+                        lines.append(f"      if (buf[0]) settings_{sl}.{ci} = strdup(buf);")
+                    elif typ == "boolean":
+                        lines.append(f'      settings_{sl}.{ci} = (strcmp(buf, "true") == 0);')
+                    elif typ in C_INT_TYPES:
+                        int_c = C_TYPE_MAP[typ]
+                        lines.append(f"      settings_{sl}.{ci} = buf[0] ? ({int_c})strtol(buf, NULL, 10) : 0;")
+                    else:
+                        lines.append(f"      settings_{sl}.{ci} = buf[0] ? (float)atof(buf) : 0.0f;")
+                lines.append("    }")
+                lines.append("")
+
+            lines.append("    pos = row_end + 6;")
+            lines.append("  }")
+            lines.append("}")
+            lines.append("")
+
+            lines.append("/* ── load Settings from SPIFFS — silently skips if file absent ── */")
+            lines.append("int load_settings_from_spiffs(void) {")
+            lines.append('  File f = SPIFFS.open("/Settings.xml", "r");')
+            lines.append("  if (!f) return 0;")
+            lines.append("  String content = f.readString();")
+            lines.append("  f.close();")
+            lines.append("  parse_settings_xml(content.c_str());")
+            lines.append("  return 1;")
+            lines.append("}")
+            lines.append("")
+            lines.append("")
+
     # ── provision_spiffs_xml: write embedded defaults to SPIFFS on startup ──
     if xml_map:
         always_tables = [t for t in xml_map if t in always_overwrite]
@@ -1139,10 +1347,15 @@ def gen_headers_block(headers_fields, field_map):
 
 
 def gen_settings_block(name, subcats, fields):
-    """Generate the Settings bar: heading + collapse button + collapsible for future subcats.
+    """Generate the Settings bar: heading + collapse button + collapsible subcategory rows.
 
     The 'headers' subcategory is excluded here — it is rendered inside #submit-area
     via gen_headers_block() so the controls appear directly below the Submit button.
+
+    Each other subcategory renders as one horizontal row using the same .field / .form-grid
+    classes as Metadata and Variables.  A single Save button sits at the bottom of the
+    collapsible (after all subcategory rows), matching the Insert-button pattern.
+    Boolean fields become checkboxes; all other types get text inputs with validateField.
     """
     field_map = {n: typ for n, typ in fields}
 
@@ -1153,24 +1366,30 @@ def gen_settings_block(name, subcats, fields):
     html += f'onclick="toggleSettingsSection(\'{name}\', this)">&#9660;</button>\n'
     html += f'  </h3>\n'
 
-    # ── subcategories other than 'headers': collapsible (hidden by default) ──
+    # ── subcategories other than 'headers': one row each, collapsible ──
     other_subcats = {k: v for k, v in subcats.items() if k != "headers"}
     html += f'  <div id="{name}_collapsible" style="display:none">\n'
     for sc_name, sc_fields in other_subcats.items():
-        html += f'    <div class="subcat-row settings-compact">\n'
+        html += f'    <div class="subcat-row">\n'
         html += f'      <span class="subcat-label">{sc_name}</span>\n'
-        html += f'      <div class="settings-form-grid">\n'
+        html += f'      <div class="form-grid">\n'
         for fn in sc_fields:
             typ = field_map[fn]
             label = fn.replace("_", " ")
-            html += f'        <div class="settings-field">\n'
+            html += f'        <div class="field">\n'
             html += f'          <label>{label}</label>\n'
-            html += (f'          <input placeholder="{typ}" data-type="{typ}"'
-                     f' data-name="{fn}" oninput="validateField(this)">\n')
+            if typ == "boolean":
+                html += (f'          <input type="checkbox" data-type="{typ}"'
+                         f' data-name="{fn}" class="settings-checkbox">\n')
+            else:
+                html += (f'          <input placeholder="{typ}" data-type="{typ}"'
+                         f' data-name="{fn}" oninput="validateField(this)">\n')
             html += f'          <span class="error-msg"></span>\n'
             html += f'        </div>\n'
         html += f'      </div>\n'
         html += f'    </div>\n'
+    # Single Save button at the bottom of all subcategory rows
+    html += f'    <button onclick="saveSettings()" class="insert-btn">Save</button>\n'
     html += f'  </div>\n'
 
     html += f'</div>\n'
@@ -1228,6 +1447,9 @@ window.addEventListener("DOMContentLoaded", () => {
       loadTable(table, schema, _onTableLoaded);
     }
   });
+
+  state["Settings"] = {};
+  loadSettings();
 
 });
 
@@ -1499,6 +1721,9 @@ function downloadZIP() {
     name: t + ".xml",
     data: rowsToXML(t, window[t + "_SCHEMA"])
   }));
+  if (Object.keys(state["Settings"] || {}).length > 0) {
+    files.push({ name: "Settings.xml", data: settingsToXML() });
+  }
   const zip  = createZIP(files);
   const blob = new Blob([zip], { type: "application/zip" });
   const a    = document.createElement("a");
@@ -1507,6 +1732,69 @@ function downloadZIP() {
   document.body.appendChild(a);
   a.click();
   a.remove();
+}
+
+
+/* ---------- SAVE SETTINGS (stores to state + logs to console) ---------- */
+function saveSettings() {
+  state["Settings"] = {};
+  document.querySelectorAll(".settings-bar input[data-name]").forEach(function(inp) {
+    if (inp.dataset.name === "Download_a_copy") return;
+    var val = inp.type === "checkbox" ? String(inp.checked) : inp.value.trim();
+    state["Settings"][inp.dataset.name] = val;
+  });
+  console.group("[ACMS] Settings state");
+  console.table(state["Settings"]);
+  console.groupEnd();
+}
+
+
+/* ---------- SETTINGS TO XML ---------- */
+/* Produces one <row> per subcategory — 4 rows total matching the XSD. */
+function settingsToXML() {
+  var xml = "<Settings>\\n";
+  Object.keys(Settings_SUBCATS).forEach(function(sc) {
+    xml += "  <row><" + sc + ">";
+    Settings_SUBCATS[sc].forEach(function(field) {
+      var val = (state["Settings"][field] !== undefined) ? state["Settings"][field] : "";
+      xml += "<" + field + ">" + val + "</" + field + ">";
+    });
+    xml += "</" + sc + "></row>\\n";
+  });
+  xml += "</Settings>";
+  return xml;
+}
+
+
+/* ---------- LOAD SETTINGS (ESP only — populate inputs + state from /Settings.xml) ---------- */
+function loadSettings() {
+  if (location.hostname === "") return;
+  fetch("/Settings.xml", { cache: "no-store" })
+    .then(function(r) { if (r.ok) return r.text(); })
+    .then(function(xml) {
+      if (!xml) return;
+      var parser = new DOMParser();
+      var doc = parser.parseFromString(xml, "application/xml");
+      state["Settings"] = {};
+      var rows = doc.getElementsByTagName("row");
+      for (var i = 0; i < rows.length; i++) {
+        Object.keys(Settings_SUBCATS).forEach(function(sc) {
+          var scEl = rows[i].getElementsByTagName(sc)[0];
+          if (!scEl) return;
+          Settings_SUBCATS[sc].forEach(function(field) {
+            var el = scEl.getElementsByTagName(field)[0];
+            if (!el) return;
+            var val = el.textContent.trim();
+            state["Settings"][field] = val;
+            var inp = document.querySelector(".settings-bar input[data-name='" + field + "']");
+            if (!inp) return;
+            if (inp.type === "checkbox") inp.checked = (val === "true");
+            else inp.value = val;
+          });
+        });
+      }
+    })
+    .catch(function() {});
 }
 
 
@@ -1535,6 +1823,15 @@ async function submitAll() {
         if (!r.ok) throw new Error(t + " save failed (" + r.status + ")");
       }
 
+      if (Object.keys(state["Settings"] || {}).length > 0) {
+        const r = await fetch("/Settings.xml", {
+          method: "POST",
+          headers: { "Content-Type": "application/xml" },
+          body: settingsToXML()
+        });
+        if (!r.ok) throw new Error("Settings save failed (" + r.status + ")");
+      }
+
       if (dlChecked) downloadZIP();
 
       await fetch("/reboot", { method: "POST" }).catch(() => {});
@@ -1551,13 +1848,18 @@ async function submitAll() {
     if (dlChecked) {
       downloadZIP();
     } else {
-      TABLE_LIST.filter(t => state[t].length > 0).forEach((t, idx) => {
-        const xml = rowsToXML(t, window[t + "_SCHEMA"]);
+      const toDownload = TABLE_LIST.filter(t => state[t].length > 0).map(t => ({
+        name: t + ".xml", data: rowsToXML(t, window[t + "_SCHEMA"])
+      }));
+      if (Object.keys(state["Settings"] || {}).length > 0) {
+        toDownload.push({ name: "Settings.xml", data: settingsToXML() });
+      }
+      toDownload.forEach(({ name, data }, idx) => {
         setTimeout(() => {
-          const blob = new Blob([xml], { type: "application/xml" });
+          const blob = new Blob([data], { type: "application/xml" });
           const a = document.createElement("a");
           a.href = URL.createObjectURL(blob);
-          a.download = t + ".xml";
+          a.download = name;
           document.body.appendChild(a);
           a.click();
           a.remove();
@@ -1603,6 +1905,44 @@ def import_zip(zip_path):
         print("WARNING: ZIP contained no .xml files.")
 
 
+def read_var_pool_size(xml_path, default):
+    """Parse Var_Pool_Size integer from a Settings.xml; returns default if absent or invalid."""
+    try:
+        tree = ET.parse(xml_path)
+        for el in tree.iter("Var_Pool_Size"):
+            v = (el.text or "").strip()
+            if v.isdigit():
+                return int(v)
+    except Exception:
+        pass
+    return default
+
+
+def gen_default_settings_xml(settings_subcats, settings_fields, max_rows, max_class=32):
+    """Generate a default Settings.xml using max_rows / max_class as schema defaults."""
+    field_map = {n: typ for n, typ in settings_fields}
+    other = {k: v for k, v in settings_subcats.items() if k != "headers"}
+    xml = "<Settings>\n"
+    for sc_name, sc_fields in other.items():
+        xml += f"<row><{sc_name}>"
+        for fn in sc_fields:
+            typ = field_map.get(fn, "string")
+            if fn == "Var_Pool_Size":
+                val = str(max_rows)
+            elif fn == "Class_Pool_Size":
+                val = str(max_class)
+            elif typ == "boolean":
+                val = "false"
+            elif typ in C_INT_TYPES or typ in C_NUMERIC_TYPES:
+                val = "0"
+            else:
+                val = ""
+            xml += f"<{fn}>{val}</{fn}>"
+        xml += f"</{sc_name}></row>\n"
+    xml += "</Settings>"
+    return xml
+
+
 def main():
     if len(sys.argv) not in (3, 4):
         print("Usage: python codegen.py <schema.xsd> <template.html> [acms_xml.zip]")
@@ -1621,6 +1961,14 @@ def main():
     # Settings: client-only, not persisted to SPIFFS, excluded from C gen.
     settings_fields = tables.get("Settings", [])
     settings_subcats = subcategories.get("Settings", {})
+
+    # Determine MAX_ROWS: read Var_Pool_Size from Settings.xml if present, else use default.
+    max_rows = MAX_ROWS
+    if os.path.isfile("Settings.xml"):
+        parsed = read_var_pool_size("Settings.xml", MAX_ROWS)
+        if parsed != MAX_ROWS:
+            print(f"  Var_Pool_Size={parsed} (from Settings.xml) overrides MAX_ROWS={MAX_ROWS}")
+        max_rows = parsed
 
     # Form tables: exclude Settings and Controls (neither maps to SPIFFS XML tables).
     form_tables = {k: v for k, v in tables.items() if k not in ("Settings", "Controls")}
@@ -1668,7 +2016,7 @@ def main():
     base = base.replace("%TABLE_BLOCKS%", gen_table_blocks(
         form_tables, validity_field_names, subcategories,
         hidden_by_default={"Metadata"}))
-    base = base.replace("%SCHEMA_JS%", gen_schema_js(form_tables))
+    base = base.replace("%SCHEMA_JS%", gen_schema_js(form_tables, settings_subcats))
     base = base.replace("%VALIDATOR_JS%", combined_js)
 
     # PC version (embed existing XML for form tables only)
@@ -1684,6 +2032,19 @@ def main():
             xml_map[t] = xml_content
             print(f"  Embedding {xml_path}")
 
+    # Add Settings to xml_map for SPIFFS provisioning (once-only, user-managed).
+    if settings_subcats and settings_fields:
+        if os.path.isfile("Settings.xml"):
+            with open("Settings.xml", "r") as f:
+                settings_xml_content = f.read()
+        else:
+            settings_xml_content = gen_default_settings_xml(
+                settings_subcats, settings_fields, max_rows)
+            with open("Settings.xml", "w") as f:
+                f.write(settings_xml_content)
+        xml_map["Settings"] = settings_xml_content
+        print(f"  Embedding Settings.xml")
+
     pc_page = base.replace("%PRELOAD_XML%", ",\n".join(preload_entries))
     with open("generated_page.html", "w") as f:
         f.write(pc_page)
@@ -1698,11 +2059,16 @@ def main():
 
     # ── C outputs ──
     with open("schema.h", "w") as f:
-        f.write(gen_c_schema_h(form_tables, subcategories))
+        f.write(gen_c_schema_h(form_tables, subcategories,
+                               settings_subcats=settings_subcats,
+                               settings_fields=settings_fields,
+                               max_rows=max_rows))
 
     with open("xml_parser.cpp", "w") as f:
         f.write(gen_c_xml_parser(form_tables, subcategories, xml_map,
-                                 always_overwrite={"Metadata"}))
+                                 always_overwrite={"Metadata", "Settings"},
+                                 settings_subcats=settings_subcats,
+                                 settings_fields=settings_fields))
 
     if xml_map:
         with open("xml_defaults.h", "w") as f:

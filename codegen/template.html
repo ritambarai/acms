@@ -192,9 +192,23 @@ button {
 
 .settings-form-grid {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 10px;
   align-items: flex-end;
+}
+
+.settings-save-btn {
+  padding: 2px 10px;
+  font-size: 11px;
+  white-space: nowrap;
+  align-self: flex-end;
+}
+
+.settings-checkbox {
+  display: block;
+  margin: 4px auto 0;
+  width: auto;
+  cursor: pointer;
 }
 
 .settings-field {

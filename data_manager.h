@@ -58,6 +58,9 @@ typedef struct var_s {
     /* ownership */
     uint16_t    class_idx;
 
+    /* constraint table row (INVALID_INDEX if none) */
+    uint16_t    constraint_idx;
+
     /* data */
     int32_t    *ext_addr;
     float     cached_val;
@@ -87,25 +90,26 @@ typedef struct var_s {
 })
 
 #define VAR_INIT(idx)    ((var_t){        \
-    .var_name   = NULL,                   \
-    .var_idx    = (idx),                  \
-    .class_idx  = 0,                      \
-    .ext_addr   = NULL,                   \
-    .cached_val = 0,                      \
-    .var_type   = NULL,                   \
-    .prev       = DM_PTR_NULL,            \
-    .next       = DM_PTR_NULL             \
+    .var_name       = NULL,               \
+    .var_idx        = (idx),              \
+    .class_idx      = 0,                  \
+    .constraint_idx = INVALID_INDEX,      \
+    .ext_addr       = NULL,               \
+    .cached_val     = 0,                  \
+    .var_type       = NULL,               \
+    .prev           = DM_PTR_NULL,        \
+    .next           = DM_PTR_NULL         \
 })
 
 /* ============================================================
  *  GLOBAL POOLS (DEFINED IN data_manager.c)
  * ============================================================ */
 
-extern class_t class_pool[MAX_CLASS];
-extern bool    used_class[MAX_CLASS];
+extern class_t class_pool[MAX_CLASS_CAP];
+extern bool    used_class[MAX_CLASS_CAP];
 
-extern var_t   var_pool[MAX_VAR];
-extern bool    used_var[MAX_VAR];
+extern var_t   var_pool[MAX_VAR_CAP];
+extern bool    used_var[MAX_VAR_CAP];
 
 /* ============================================================
  *  GLOBAL CURSORS (MONOTONIC, NEVER REUSED)
@@ -141,7 +145,8 @@ bool dm_set_value(const char *class_name,
                   const char *type,
                   const char *var_name,
                   void       *ext_addr,
-                  float       value);
+                  float       value,
+                  uint16_t    constraint_idx);
 
 void get_value(void *ext_addr);
 void get_class_values(const char *class_name);
