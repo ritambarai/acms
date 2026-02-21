@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+
+  <!-- ================= TOP TABLE ================= -->
+  <xs:element name="Variables">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="row" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:sequence>
+
+              <!-- ── description ── -->
+              <xs:element name="description">
+                <xs:complexType><xs:sequence>
+                  <xs:element name="Class" type="xs:string"/>
+                  <xs:element name="Name" type="xs:string"/>
+                  <xs:element name="Type" type="xs:string"/>
+                </xs:sequence></xs:complexType>
+              </xs:element>
+
+              <!-- ── values ── -->
+              <xs:element name="values">
+                <xs:complexType><xs:sequence>
+                  <xs:element name="Value" type="xs:float"/>
+                  <xs:element name="Operation_ID" type="xs:float"/>
+                  <xs:element name="Threshold" type="xs:float"/>
+                  <xs:element name="Fault_Code" type="xs:float"/>
+                  <xs:element name="Increment" type="xs:float"/>
+                </xs:sequence></xs:complexType>
+              </xs:element>
+
+              <!-- ── modbus ── -->
+              <xs:element name="modbus">
+                <xs:complexType><xs:sequence>
+                  <xs:element name="Slave_ID" type="xs:float"/>
+                  <xs:element name="Function_ID" type="xs:float"/>
+                  <xs:element name="Start_Address" type="xs:float"/>
+                  <xs:element name="Data_Length" type="xs:float"/>
+                </xs:sequence></xs:complexType>
+              </xs:element>
+
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <!-- ================= BOTTOM TABLE ================= -->
+  <xs:element name="Metadata">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="row" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="Key" type="xs:float" minOccurs="1" maxOccurs="1"/>
+              <xs:element name="Message" type="xs:string" minOccurs="1" maxOccurs="1"/>
+              <xs:element name="Class" type="xs:string" minOccurs="1" maxOccurs="1"/>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <!-- ================= CONTROLS ================= -->
+  <xs:element name="Controls">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="row" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:sequence>
+
+              <!-- ── validity ── -->
+              <xs:element name="validity">
+                <xs:complexType><xs:sequence>
+                  <xs:element name="Name" type="xs:string"/>
+                  <xs:element name="Value" type="xs:string"/>
+                  <xs:element name="Fault_Code" type="xs:string"/>
+                  <xs:element name="Operation_ID" type="xs:string"/>
+                </xs:sequence></xs:complexType>
+              </xs:element>
+
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+</xs:schema>

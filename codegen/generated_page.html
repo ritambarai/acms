@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>ACMS Master Portal</title>
+
+<style>
+body {
+  font-family: Arial;
+  margin: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.half {
+  flex: 1;
+  padding: 12px;
+  border-bottom: 2px solid #ccc;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ===== FORM LAYOUT ===== */
+.form-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: flex-end;
+  justify-content: space-evenly;
+}
+
+.field {
+  flex: 0 0 var(--field-width);   /* fixed width */
+  min-width: 0;
+}
+
+.field label {
+  display: block;
+  text-align: center;
+}
+
+.field input {
+  width: 100%;
+  padding: 6px;
+  box-sizing: border-box;
+}
+
+.field input.invalid {
+  border: 2px solid red;
+}
+
+.error-msg {
+  display: block;
+  color: red;
+  font-size: 11px;
+  text-align: center;
+  min-height: 14px;
+}
+
+.main-header {
+  position: relative;
+  text-align: center;
+  margin: 15px 0;
+}
+
+.main-header h1 {
+  margin: 0;
+  display: inline;
+}
+
+#submit-btn {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.category-header {
+  text-align: center;
+  margin-bottom: 10px;
+  position: relative;
+}
+
+.toggle-btn {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 2px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.half.collapsed {
+  flex: 0 0 auto;
+}
+
+/* ===== SUBCATEGORY ROWS ===== */
+.subcat-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.subcat-label {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  transform: rotate(180deg);
+  font-size: 11px;
+  font-weight: bold;
+  text-transform: uppercase;
+  color: #666;
+  white-space: nowrap;
+  padding: 2px 0;
+}
+
+.subcat-row .form-grid {
+  flex: 1;
+}
+
+
+/* ===== TABLE ===== */
+.table-wrap {
+  flex: 1;
+  overflow-y: auto;
+  margin-top: 10px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th, td {
+  border: 1px solid #ccc;
+  padding: 6px;
+  text-align: center;
+}
+
+th {
+  background: #eee;
+}
+
+.delete {
+  color: red;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+/* ===== BUTTON ===== */
+button {
+  padding: 6px 16px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.insert-btn {
+  display: block;
+  margin: 8px auto;
+  padding: 3px 10px;
+  font-size: 12px;
+}
+</style>
+</head>
+
+<body>
+<div class="main-header">
+  <h1>ACMS Master Portal</h1>
+  <button id="submit-btn" onclick="submitAll()">Submit</button>
+</div>
+
+<!-- ======== TABLE BLOCKS (INJECTED FROM XSD) ======== -->
+
+<div class="half collapsed">
+  <h3 class="category-header">
+    Metadata
+    <button class="toggle-btn" onclick="toggleSection('Metadata', this)">&#9660;</button>
+  </h3>
+  <div id="Metadata_section" style="display:none">
+  <div id="Metadata_form">
+  <div class="form-grid">
+    <div class="field">
+      <label>Key</label>
+      <input placeholder="float" data-type="float" data-name="Key" oninput="validateField(this)">
+      <span class="error-msg"></span>
+    </div>
+    <div class="field">
+      <label>Message</label>
+      <input placeholder="string" data-type="string" data-name="Message" oninput="validateField(this)">
+      <span class="error-msg"></span>
+    </div>
+    <div class="field">
+      <label>Class</label>
+      <input placeholder="string" data-type="string" data-name="Class" oninput="validateField(this); var ni=document.getElementById('Metadata_form').querySelector('[data-field="Name"]'); if(ni) validateValidityField(ni)">
+      <span class="error-msg"></span>
+    </div>
+  </div>
+
+  </div>
+
+  <div class="table-wrap">
+    <table>
+    <thead><tr>
+      <th>Key</th>
+      <th>Message</th>
+      <th>Class</th>
+      <th>X</th>
+    </tr></thead>
+    <tbody id="Metadata_body"></tbody>
+  </table>
+  </div>
+
+  <button type="button" class="insert-btn" onclick="insertRow('Metadata', Metadata_SCHEMA)">Insert</button>
+  </div>
+</div>
+
+<div class="half">
+  <h3 class="category-header">
+    Variables
+    <button class="toggle-btn" onclick="toggleSection('Variables', this)">&#9650;</button>
+  </h3>
+  <div id="Variables_section">
+  <div id="Variables_form">
+  <div class="subcat-row">
+    <span class="subcat-label">description</span>
+    <div class="form-grid">
+    <div class="field">
+      <label>Class</label>
+      <input placeholder="string" data-type="string" data-name="Class" oninput="validateField(this); var ni=document.getElementById('Variables_form').querySelector('[data-field="Name"]'); if(ni) validateValidityField(ni)">
+      <span class="error-msg"></span>
+    </div>
+    <div class="field">
+      <label>Name</label>
+      <input placeholder="string" data-type="string" data-name="Name" data-field="Name" onblur="alertIfInvalid(this)" oninput="validateValidityField(this)">
+      <span class="error-msg"></span>
+    </div>
+    <div class="field">
+      <label>Type</label>
+      <input placeholder="string" data-type="string" data-name="Type" oninput="validateField(this); var vi=document.getElementById('Variables_form').querySelector('[data-field="Value"]'); if(vi) validateValidityField(vi); var ni=document.getElementById('Variables_form').querySelector('[data-field="Name"]'); if(ni) validateValidityField(ni)">
+      <span class="error-msg"></span>
+    </div>
+    </div>
+  </div>
+  <div class="subcat-row">
+    <span class="subcat-label">values</span>
+    <div class="form-grid">
+    <div class="field">
+      <label>Value</label>
+      <input placeholder="float" data-type="float" data-name="Value" data-field="Value" oninput="validateValidityField(this)">
+      <span class="error-msg"></span>
+    </div>
+    <div class="field">
+      <label>Operation_ID</label>
+      <input placeholder="float" data-type="float" data-name="Operation_ID" data-field="Operation_ID" oninput="validateValidityField(this)">
+      <span class="error-msg"></span>
+    </div>
+    <div class="field">
+      <label>Threshold</label>
+      <input placeholder="float" data-type="float" data-name="Threshold" oninput="validateField(this)">
+      <span class="error-msg"></span>
+    </div>
+    <div class="field">
+      <label>Fault_Code</label>
+      <input placeholder="float" data-type="float" data-name="Fault_Code" data-field="Fault_Code" oninput="validateValidityField(this)">
+      <span class="error-msg"></span>
+    </div>
+    <div class="field">
+      <label>Increment</label>
+      <input placeholder="float" data-type="float" data-name="Increment" oninput="validateField(this)">
+      <span class="error-msg"></span>
+    </div>
+    </div>
+  </div>
+  <div class="subcat-row">
+    <span class="subcat-label">modbus</span>
+    <div class="form-grid">
+    <div class="field">
+      <label>Slave_ID</label>
+      <input placeholder="float" data-type="float" data-name="Slave_ID" oninput="validateField(this)">
+      <span class="error-msg"></span>
+    </div>
+    <div class="field">
+      <label>Function_ID</label>
+      <input placeholder="float" data-type="float" data-name="Function_ID" oninput="validateField(this)">
+      <span class="error-msg"></span>
+    </div>
+    <div class="field">
+      <label>Start_Address</label>
+      <input placeholder="float" data-type="float" data-name="Start_Address" oninput="validateField(this)">
+      <span class="error-msg"></span>
+    </div>
+    <div class="field">
+      <label>Data_Length</label>
+      <input placeholder="float" data-type="float" data-name="Data_Length" oninput="validateField(this)">
+      <span class="error-msg"></span>
+    </div>
+    </div>
+  </div>
+
+  </div>
+
+  <div class="table-wrap">
+    <table>
+    <thead><tr>
+      <th>Class</th>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Value</th>
+      <th>Operation_ID</th>
+      <th>Threshold</th>
+      <th>Fault_Code</th>
+      <th>Increment</th>
+      <th>Slave_ID</th>
+      <th>Function_ID</th>
+      <th>Start_Address</th>
+      <th>Data_Length</th>
+      <th>X</th>
+    </tr></thead>
+    <tbody id="Variables_body"></tbody>
+  </table>
+  </div>
+
+  <button type="button" class="insert-btn" onclick="insertRow('Variables', Variables_SCHEMA)">Insert</button>
+  </div>
+</div>
+
+
+<script>
+
+/* ======== SCHEMA (INJECTED FROM XSD) ======== */
+var Metadata_SCHEMA = [
+  { name:"Key", type:"float" },
+  { name:"Message", type:"string" },
+  { name:"Class", type:"string" }
+];
+
+var Variables_SCHEMA = [
+  { name:"Class", type:"string" },
+  { name:"Name", type:"string" },
+  { name:"Type", type:"string" },
+  { name:"Value", type:"float" },
+  { name:"Operation_ID", type:"float" },
+  { name:"Threshold", type:"float" },
+  { name:"Fault_Code", type:"float" },
+  { name:"Increment", type:"float" },
+  { name:"Slave_ID", type:"float" },
+  { name:"Function_ID", type:"float" },
+  { name:"Start_Address", type:"float" },
+  { name:"Data_Length", type:"float" }
+];
+
+var TABLE_LIST = ["Metadata", "Variables"];
+
+
+/* ======== PRELOADED XML (embedded at build time) ======== */
+var PRELOAD_XML = {
+  "Metadata": "<Metadata>\n<row><Key>0</Key><Message>choice</Message><Class>type</Class></row>\n<row><Key>1</Key><Message>numeric</Message><Class>type</Class></row>\n<row><Key>1</Key><Message>bar</Message><Class>pressure</Class></row>\n<row><Key>1</Key><Message>Less than</Message><Class>Operation_ID</Class></row>\n<row><Key>1</Key><Message>TOO LOW</Message><Class>Fault_Code</Class></row>\n</Metadata>\n",
+  "Variables": "<Variables>\n<row><Class>1</Class><Type>2</Type><Name>1</Name><Initial_Value>2</Initial_Value><Operation_ID>1</Operation_ID><Threshold>2</Threshold><Increment>2</Increment><Slave_ID>2</Slave_ID><Function_ID>1</Function_ID><Start_Address>2</Start_Address><Length>5</Length></row>\n</Variables>"
+};
+
+/* ======== STABLE JS LOGIC ======== */
+
+let state = {};
+
+/* ---------- INITIALIZATION ---------- */
+window.addEventListener("DOMContentLoaded", () => {
+
+  /* Compute MAX_COLUMNS safely (cap at 7 per row) */
+  const schemas = TABLE_LIST.map(t => window[t + "_SCHEMA"]);
+  const MAX_COLUMNS = Math.min(6, Math.max(...schemas.map(s => s.length)));
+
+  const MIN_GAP = 14;
+
+  /* Compute fixed field width */
+  const FIELD_WIDTH = `calc((100% - ${(MAX_COLUMNS - 1) * MIN_GAP}px) / ${MAX_COLUMNS})`;
+
+  document.documentElement.style.setProperty("--field-width", FIELD_WIDTH);
+
+  /* Initialize each table */
+  TABLE_LIST.forEach(table => {
+
+    const schema = window[table + "_SCHEMA"];
+    state[table] = [];
+
+    buildForm(table);
+
+    /* load from embedded XML (PC) or fetch from SPIFFS (ESP) */
+    if (PRELOAD_XML[table]) {
+      parseXML(PRELOAD_XML[table], table, schema);
+    } else {
+      loadTable(table, schema);
+    }
+  });
+
+});
+
+
+/* ---------- BUILD FORM ---------- */
+function buildForm(table) {
+  // Flex layout already handles spacing.
+  // Nothing required here for layout.
+}
+
+
+/* ---------- FIELD VALIDATOR (generated from XSD) ---------- */
+/* Types found: float, string */
+function validateField(input) {
+  const type = input.dataset.type;
+  const v = input.value.trim();
+  const errSpan = input.nextElementSibling;
+
+  if (v === "") {
+    input.classList.remove("invalid");
+    errSpan.textContent = "";
+    return true;
+  }
+
+  let msg = "";
+
+  switch (type) {
+    case "float":
+      if (isNaN(v)) msg = "Must be a number";
+      break;
+  }
+
+  if (msg) {
+    input.classList.add("invalid");
+    errSpan.textContent = msg;
+    return false;
+  }
+
+  input.classList.remove("invalid");
+  errSpan.textContent = "";
+  return true;
+}
+
+
+/* ---------- VALIDITY CHECKER (generated from XSD) ---------- */
+
+/* Build nested Metadata dict: { Class: { Key: Message } } */
+function buildMetadataDict() {
+  var dict = {};
+  if (!state["Metadata"]) return dict;
+  var schema = Metadata_SCHEMA;
+  var classIdx = -1, keyIdx = -1, msgIdx = -1;
+  for (var i = 0; i < schema.length; i++) {
+    if (schema[i].name === "Class") classIdx = i;
+    if (schema[i].name === "Key") keyIdx = i;
+    if (schema[i].name === "Message") msgIdx = i;
+  }
+  if (classIdx < 0 || keyIdx < 0 || msgIdx < 0) return dict;
+  state["Metadata"].forEach(function(row) {
+    var cls = row[classIdx];
+    var key = row[keyIdx];
+    var msg = row[msgIdx];
+    if (cls !== null) {
+      if (!dict[cls]) dict[cls] = {};
+      if (key !== null) dict[cls][key] = msg || "";
+    }
+  });
+  return dict;
+}
+
+/* Show alert once per error reason — only called from onblur, never from insertRow */
+function alertIfInvalid(input) {
+  var errSpan = input.nextElementSibling;
+  var msg = errSpan ? errSpan.textContent : "";
+  if (msg === "NO MATCH" || msg === "NO TYPE" || msg === "NO UNIT") {
+    var half = input.closest(".half");
+    var btn = half ? half.querySelector(".insert-btn") : null;
+    if (btn) btn.disabled = true;
+  }
+  if (msg === "NO MATCH" && input.dataset.lastAlert !== "nomatch") {
+    input.dataset.lastAlert = "nomatch";
+    alert("Must Insert Variable Type And Unit First");
+  } else if (msg === "NO TYPE" && input.dataset.lastAlert !== "notype") {
+    input.dataset.lastAlert = "notype";
+    alert("Must Insert Variable Type");
+  } else if (msg === "NO UNIT" && input.dataset.lastAlert !== "nounit") {
+    input.dataset.lastAlert = "nounit";
+    alert("Must Insert Variable Unit (Use None if Variable has No Units)");
+  }
+}
+
+/* Validate a single Validity form field */
+function validateValidityField(input) {
+  var fieldName = input.dataset.field;
+  var v = input.value.trim();
+  var errSpan = input.nextElementSibling;
+
+  if (v === "") {
+    if (fieldName === "Name") {
+      var _h = input.closest(".half");
+      var _b = _h ? _h.querySelector(".insert-btn") : null;
+      if (_b) _b.disabled = false;
+      input.dataset.lastAlert = "";
+    }
+    input.style.borderColor = "";
+    input.classList.remove("invalid");
+    errSpan.textContent = "";
+    errSpan.style.color = "";
+    return true;
+  }
+
+  var dict = buildMetadataDict();
+
+  /* ── Name field: stepped check — type row → bool shortcut → unit row ── */
+  if (fieldName === "Name") {
+    var form = input.closest('[id$="_form"]');
+    var typeInput = form ? form.querySelector('[data-name="Type"]') : null;
+    var typeVal = typeInput ? typeInput.value.trim().toLowerCase() : "";
+    var half = input.closest(".half");
+    var insertBtn = half ? half.querySelector(".insert-btn") : null;
+    if (typeVal === "type" || typeVal === "units" || typeVal === "validity") {
+      input.style.borderColor = "";
+      input.classList.remove("invalid");
+      errSpan.textContent = "";
+      errSpan.style.color = "";
+      input.dataset.lastAlert = "";
+      return true;
+    }
+    var classInput = form ? form.querySelector('[data-name="Class"]') : null;
+    var classVal = classInput ? classInput.value.trim() : "";
+    var varSchema = (typeof Variables_SCHEMA !== "undefined") ? Variables_SCHEMA : [];
+    var classIdx = -1, typeIdx = -1, valueIdx = -1, nameIdx = -1;
+    for (var i = 0; i < varSchema.length; i++) {
+      if (varSchema[i].name === "Class") classIdx = i;
+      if (varSchema[i].name === "Type")  typeIdx  = i;
+      if (varSchema[i].name === "Value") valueIdx = i;
+      if (varSchema[i].name === "Name")  nameIdx  = i;
+    }
+    var varRows = (state && state["Variables"]) ? state["Variables"] : [];
+    /* gate on class existence first so type/unit alerts can fire */
+    var classRows = varRows.filter(function(row) {
+      return classIdx >= 0 && row[classIdx] && classVal &&
+             row[classIdx].toLowerCase() === classVal.toLowerCase();
+    });
+    if (classRows.length === 0) {
+      input.style.borderColor = "red";
+      input.classList.add("invalid");
+      errSpan.textContent = "NO MATCH";
+      errSpan.style.color = "red";
+      if (insertBtn) insertBtn.disabled = true;
+      input.dataset.lastAlert = "";
+      return false;
+    }
+
+    /* ── Step 1: type row must exist ── */
+    var typeRow = null;
+    for (var j = 0; j < classRows.length; j++) {
+      if (typeIdx >= 0 && classRows[j][typeIdx] &&
+          classRows[j][typeIdx].toLowerCase() === "type") {
+        typeRow = classRows[j]; break;
+      }
+    }
+    if (!typeRow) {
+      input.style.borderColor = "red";
+      input.classList.add("invalid");
+      errSpan.textContent = "NO TYPE";
+      errSpan.style.color = "red";
+      if (insertBtn) insertBtn.disabled = true;
+      return false;
+    }
+
+    /* ── Step 2: resolve type label from Metadata ── */
+    var tClassKey = Object.keys(dict).find(function(k) {
+      return k.toLowerCase() === "type";
+    }) || "type";
+    var tKeyVal = (typeRow[valueIdx] !== null && typeRow[valueIdx] !== undefined)
+      ? String(typeRow[valueIdx]) : "";
+    var typeLabel = (dict[tClassKey] && dict[tClassKey].hasOwnProperty(tKeyVal))
+      ? dict[tClassKey][tKeyVal].toLowerCase() : "";
+    input.style.borderColor = "green";
+    input.classList.remove("invalid");
+    errSpan.textContent = typeLabel.toUpperCase();
+    errSpan.style.color = "green";
+    input.dataset.lastAlert = "";
+
+    /* ── Step 3: bool/choice → skip unit check, still validate name ── */
+    if (typeLabel === "bool" || typeLabel === "choice") {
+      var boolNameMatch = classRows.some(function(row) {
+        return nameIdx >= 0 && row[nameIdx] && v &&
+               row[nameIdx].toLowerCase() === v.toLowerCase();
+      });
+      if (!boolNameMatch) {
+        input.style.borderColor = "red";
+        input.classList.add("invalid");
+        errSpan.textContent = "NO MATCH";
+        errSpan.style.color = "red";
+        if (insertBtn) insertBtn.disabled = true;
+        input.dataset.lastAlert = "";
+        return false;
+      }
+      if (insertBtn) insertBtn.disabled = false;
+      return true;
+    }
+
+    /* ── Step 4: non-bool → unit row must exist ── */
+    var unitRow = null;
+    for (var k = 0; k < classRows.length; k++) {
+      if (typeIdx >= 0 && classRows[k][typeIdx] &&
+          classRows[k][typeIdx].toLowerCase() === "unit") {
+        unitRow = classRows[k]; break;
+      }
+    }
+    if (!unitRow) {
+      input.style.borderColor = "red";
+      input.classList.add("invalid");
+      errSpan.textContent = "NO UNIT";
+      errSpan.style.color = "red";
+      if (insertBtn) insertBtn.disabled = true;
+      return false;
+    }
+
+    /* ── Step 5: resolve unit message from Metadata (use classVal class only) ── */
+    var uKeyVal = (unitRow[valueIdx] !== null && unitRow[valueIdx] !== undefined)
+      ? String(unitRow[valueIdx]) : "";
+    var uClassKey = Object.keys(dict).find(function(k) {
+      return k.toLowerCase() === classVal.toLowerCase();
+    });
+    var uMsg = (uClassKey && dict[uClassKey].hasOwnProperty(uKeyVal))
+      ? dict[uClassKey][uKeyVal] : null;
+    if (uMsg !== null) {
+      /* ── Step 5b: name must also exist in this class ── */
+      var nameMatch = classRows.some(function(row) {
+        return nameIdx >= 0 && row[nameIdx] && v &&
+               row[nameIdx].toLowerCase() === v.toLowerCase();
+      });
+      if (!nameMatch) {
+        input.style.borderColor = "red";
+        input.classList.add("invalid");
+        errSpan.textContent = "NO MATCH";
+        errSpan.style.color = "red";
+        if (insertBtn) insertBtn.disabled = true;
+        input.dataset.lastAlert = "";
+        return false;
+      }
+      input.style.borderColor = "green";
+      input.classList.remove("invalid");
+      errSpan.textContent = uMsg.toUpperCase();
+      errSpan.style.color = "green";
+      if (insertBtn) insertBtn.disabled = false;
+      input.dataset.lastAlert = "";
+      return true;
+    }
+    /* unit row present but key missing from Metadata */
+    input.style.borderColor = "red";
+    input.classList.add("invalid");
+    errSpan.textContent = "NO UNIT";
+    errSpan.style.color = "red";
+    if (insertBtn) insertBtn.disabled = true;
+    return false;
+  }
+
+  /* Value field: validate against Metadata when Type is 'unit' or 'type' */
+  var classKey = fieldName;
+  if (fieldName === "Value") {
+    var form = input.closest("[id$=\"_form\"]");
+    var typeInput = form.querySelector('[data-name="Type"]');
+    var typeVal = typeInput ? typeInput.value.trim().toLowerCase() : "";
+
+    if (typeVal === "unit") {
+      /* class key = the Name field value (case-insensitive lookup in Metadata) */
+      var nameInput = form.querySelector('[data-name="Name"]');
+      var nameVal = nameInput ? nameInput.value.trim() : "";
+      classKey = Object.keys(dict).find(function(k) { return k.toLowerCase() === nameVal.toLowerCase(); }) || nameVal;
+    } else if (typeVal === "type") {
+      /* class key = 'type'; Value must match a Key in Metadata where Class='type' */
+      classKey = Object.keys(dict).find(function(k) { return k.toLowerCase() === "type"; }) || "type";
+    } else {
+      /* no Metadata validation for other Type values */
+      input.style.borderColor = "";
+      input.classList.remove("invalid");
+      errSpan.textContent = "";
+      errSpan.style.color = "";
+      return true;
+    }
+  }
+
+  /* Step 1: check class exists in Metadata */
+  if (!dict[classKey]) {
+    input.style.borderColor = "red";
+    input.classList.add("invalid");
+    errSpan.textContent = "NO MATCH";
+    errSpan.style.color = "red";
+    return false;
+  }
+
+  /* Step 2: check typed value is a key in the class dict */
+  if (!dict[classKey].hasOwnProperty(v)) {
+    input.style.borderColor = "red";
+    input.classList.add("invalid");
+    errSpan.textContent = "MISMATCH";
+    errSpan.style.color = "red";
+    return false;
+  }
+
+  /* Key found — highlight green, show message */
+  input.style.borderColor = "green";
+  input.classList.remove("invalid");
+  errSpan.textContent = dict[classKey][v].toUpperCase();
+  errSpan.style.color = "green";
+  return true;
+}
+
+
+
+/* ---------- INSERT ROW ---------- */
+function insertRow(table, schema) {
+
+  if (!state[table]) {
+    state[table] = [];
+  }
+
+  const inputs = document.querySelectorAll(`#${table}_form input`);
+
+  /* validate all fields first (no alerts — alertIfInvalid is only wired to oninput) */
+  let valid = true;
+  inputs.forEach(inp => {
+    const fn = inp.dataset.field ? validateValidityField : validateField;
+    if (!fn(inp)) valid = false;
+  });
+  if (!valid) return;
+
+  const row = [];
+
+  for (let i = 0; i < inputs.length; i++) {
+    const v = inputs[i].value.trim();
+    row.push(v === "" ? null : v);
+    inputs[i].value = "";
+    inputs[i].style.borderColor = "";
+    inputs[i].classList.remove("invalid");
+    inputs[i].nextElementSibling.textContent = "";
+    inputs[i].nextElementSibling.style.color = "";
+  }
+
+  if (row.every(v => v === null)) return;
+
+  state[table].push(row);
+  renderTable(table, schema);
+}
+
+
+/* ---------- RENDER TABLE ---------- */
+function renderTable(table, schema) {
+
+  const body = document.getElementById(table + "_body");
+  body.innerHTML = "";
+
+  state[table].forEach((r, i) => {
+
+    let tr = "<tr>";
+
+    r.forEach(v => {
+      tr += `<td>${v ?? ""}</td>`;
+    });
+
+    tr += `<td class="delete" onclick="deleteRow('${table}',${i})">X</td></tr>`;
+
+    body.innerHTML += tr;
+  });
+}
+
+
+/* ---------- DELETE ROW ---------- */
+function deleteRow(table, i) {
+
+  if (!state[table]) return;
+
+  state[table].splice(i, 1);
+  renderTable(table, window[table + "_SCHEMA"]);
+}
+
+
+/* ---------- XML TAG HELPER ---------- */
+function xmlTag(name) {
+  return name.replace(/ /g, "_");
+}
+
+
+/* ---------- CONVERT TO XML ---------- */
+function rowsToXML(table, schema) {
+
+  let xml = `<${table}>\n`;
+
+  state[table].forEach(r => {
+
+    let line = "<row>";
+
+    schema.forEach((f, i) => {
+      const tag = xmlTag(f.name);
+      const v = r[i];
+
+      line += v === null
+        ? `<${tag}/>`
+        : `<${tag}>${v}</${tag}>`;
+    });
+
+    xml += line + "</row>\n";
+  });
+
+  xml += `</${table}>`;
+
+  return xml;
+}
+
+
+/* ---------- PARSE XML INTO TABLE ---------- */
+function parseXML(xmlStr, table, schema) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xmlStr, "application/xml");
+  const rows = doc.getElementsByTagName("row");
+
+  if (!state[table]) state[table] = [];
+
+  for (let r = 0; r < rows.length; r++) {
+    const row = [];
+    schema.forEach(f => {
+      const el = rows[r].getElementsByTagName(xmlTag(f.name))[0];
+      const v = el && el.textContent.trim();
+      row.push(v ? v : null);
+    });
+    state[table].push(row);
+  }
+
+  renderTable(table, schema);
+}
+
+
+/* ---------- LOAD XML (SPIFFS on ESP / same dir on PC) ---------- */
+function loadTable(table, schema) {
+  const url = (location.hostname !== "") ? "/" + table + ".xml"
+                                         : table + ".xml";
+  fetch(url)
+    .then(r => { if (r.ok) return r.text(); throw ""; })
+    .then(xml => parseXML(xml, table, schema))
+    .catch(() => {});
+}
+
+
+/* ---------- TOGGLE SECTION ---------- */
+function toggleSection(table, btn) {
+  const section = document.getElementById(table + "_section");
+  const half    = btn.closest(".half");
+  const hidden  = section.style.display === "none";
+  section.style.display = hidden ? "" : "none";
+  btn.innerHTML = hidden ? "&#9650;" : "&#9660;";
+  half.classList.toggle("collapsed", !hidden);
+}
+
+
+/* ---------- WAIT FOR REBOOT ---------- */
+async function waitForReboot(btn) {
+  /* Give the ESP time to actually go down before polling */
+  btn.textContent = "Rebooting...";
+  await new Promise(r => setTimeout(r, 3000));
+
+  const deadline = Date.now() + 30000;
+  while (Date.now() < deadline) {
+    btn.textContent = "Waiting...";
+    try {
+      const r = await fetch("/test", { cache: "no-store" });
+      if (r.ok) { location.reload(); return; }
+    } catch (e) { /* ESP still offline — keep polling */ }
+    await new Promise(r => setTimeout(r, 1500));
+  }
+
+  btn.disabled = false;
+  btn.textContent = "Submit";
+  alert("Reboot timed out — please refresh the page manually.");
+}
+
+
+/* ---------- SUBMIT ---------- */
+async function submitAll() {
+
+  const isESP = location.hostname !== "";
+
+  if (isESP) {
+    const btn = document.getElementById("submit-btn");
+    btn.disabled = true;
+    btn.textContent = "Saving...";
+
+    try {
+      /* POST each XML sequentially — wait for each to succeed */
+      for (const t of TABLE_LIST) {
+        const xml = rowsToXML(t, window[t + "_SCHEMA"]);
+        const r = await fetch("/" + t + ".xml", {
+          method: "POST",
+          headers: { "Content-Type": "application/xml" },
+          body: xml
+        });
+        if (!r.ok) throw new Error(t + " save failed (" + r.status + ")");
+      }
+
+      /* All saved — trigger reboot then wait for ESP to come back */
+      await fetch("/reboot", { method: "POST" }).catch(() => {});
+      await waitForReboot(btn);
+
+    } catch(e) {
+      btn.disabled = false;
+      btn.textContent = "Submit";
+      alert("Error: " + e.message);
+    }
+
+  } else {
+    /* PC: download each non-empty table as an XML file */
+    TABLE_LIST.filter(t => state[t].length > 0).forEach((t, idx) => {
+      const xml = rowsToXML(t, window[t + "_SCHEMA"]);
+      setTimeout(() => {
+        const blob = new Blob([xml], { type: "application/xml" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = t + ".xml";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }, idx * 200);
+    });
+  }
+}
+
+
+</script>
+
+</body>
+</html>
+
