@@ -1,0 +1,8 @@
+# Compiled binaries
+dm_test
+*.o
+*.out
+*.elf
+
+# Build artifacts
+build/

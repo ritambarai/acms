@@ -1,0 +1,3 @@
+<Variables>
+<row><Class>1</Class><Type>2</Type><Name>1</Name><Initial_Value>2</Initial_Value><Operation_ID>1</Operation_ID><Threshold>2</Threshold><Increment>2</Increment><Slave_ID>2</Slave_ID><Function_ID>1</Function_ID><Start_Address>2</Start_Address><Length>5</Length></row>
+</Variables>

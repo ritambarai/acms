@@ -1,0 +1,10 @@
+//if you want to  keep an argument blank keep it "" or -99
+X(200, "OK",               "success")
+X(201, "Created",          "success")
+X(400, "Bad Request",      "error")
+X(401, "Unauthorized",     "error")
+X(500, "Internal Error",   "error")
+X(1, "ON",   "status")
+X(0, "OFF",   "status")
+X(2, "AUTO",   "status") 
+
