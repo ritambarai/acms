@@ -16,6 +16,25 @@ static const char METADATA_XML_DEFAULT[] = R"XMLRAW(
 
 static const char VARIABLES_XML_DEFAULT[] = R"XMLRAW(
 <Variables>
-<row><Class>1</Class><Type>2</Type><Name>1</Name><Initial_Value>2</Initial_Value><Operation_ID>1</Operation_ID><Threshold>2</Threshold><Increment>2</Increment><Slave_ID>2</Slave_ID><Function_ID>1</Function_ID><Start_Address>2</Start_Address><Length>5</Length></row>
+<row>
+  <description><Class>sensor</Class><Name>pressure</Name><Type>main</Type><Value>1.54</Value></description>
+  <constraints><Operation_ID>1</Operation_ID><Threshold>10</Threshold><Fault_Code>1</Fault_Code><Increment/></constraints>
+  <modbus><Slave_ID/><Function_ID/><Start_Address/><Data_Length/></modbus>
+</row>
+<row>
+  <description><Class>sensor</Class><Name>pressure</Name><Type>type</Type><Value>1</Value></description>
+  <constraints><Operation_ID/><Threshold/><Fault_Code/><Increment/></constraints>
+  <modbus><Slave_ID/><Function_ID/><Start_Address/><Data_Length/></modbus>
+</row>
+<row>
+  <description><Class>sensor</Class><Name>pressure</Name><Type>unit</Type><Value>1</Value></description>
+  <constraints><Operation_ID/><Threshold/><Fault_Code/><Increment/></constraints>
+  <modbus><Slave_ID/><Function_ID/><Start_Address/><Data_Length/></modbus>
+</row>
+<row>
+  <description><Class>sensor</Class><Name>status</Name><Type>unit</Type><Value>1</Value></description>
+  <constraints><Operation_ID/><Threshold/><Fault_Code/><Increment/></constraints>
+  <modbus><Slave_ID/><Function_ID/><Start_Address/><Data_Length/></modbus>
+</row>
 </Variables>
 )XMLRAW";

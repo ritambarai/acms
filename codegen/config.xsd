@@ -1,6 +1,28 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
 
+  <!-- ================= SETTINGS (client-only, not persisted to SPIFFS) ================= -->
+  <xs:element name="Settings">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="row" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:sequence>
+
+              <!-- ── headers ── -->
+              <xs:element name="headers">
+                <xs:complexType><xs:sequence>
+                  <xs:element name="Download_a_copy" type="xs:boolean"/>
+                </xs:sequence></xs:complexType>
+              </xs:element>
+
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
   <!-- ================= TOP TABLE ================= -->
   <xs:element name="Variables">
     <xs:complexType>
@@ -15,13 +37,13 @@
                   <xs:element name="Class" type="xs:string"/>
                   <xs:element name="Name" type="xs:string"/>
                   <xs:element name="Type" type="xs:string"/>
+                  <xs:element name="Value" type="xs:float"/>
                 </xs:sequence></xs:complexType>
               </xs:element>
 
-              <!-- ── values ── -->
-              <xs:element name="values">
+              <!-- ── constraints ── -->
+              <xs:element name="constraints">
                 <xs:complexType><xs:sequence>
-                  <xs:element name="Value" type="xs:float"/>
                   <xs:element name="Operation_ID" type="xs:float"/>
                   <xs:element name="Threshold" type="xs:float"/>
                   <xs:element name="Fault_Code" type="xs:float"/>
@@ -71,10 +93,16 @@
           <xs:complexType>
             <xs:sequence>
 
-              <!-- ── validity ── -->
-              <xs:element name="validity">
+              <!-- ── validation ── -->
+              <xs:element name="validation">
                 <xs:complexType><xs:sequence>
                   <xs:element name="Name" type="xs:string"/>
+                </xs:sequence></xs:complexType>
+              </xs:element>
+
+              <!-- ── verification ── -->
+              <xs:element name="verification">
+                <xs:complexType><xs:sequence>
                   <xs:element name="Value" type="xs:string"/>
                   <xs:element name="Fault_Code" type="xs:string"/>
                   <xs:element name="Operation_ID" type="xs:string"/>
