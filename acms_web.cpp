@@ -8,6 +8,7 @@ extern "C" {
   #include "schema.h"
   #include "data_manager.h"
 }
+#include "network_manager.h"
 #include "json_telemetry.h"
 #include "acms_web.h"
 #include "web_page.h"
@@ -15,6 +16,7 @@ extern "C" {
 /* xml_parser.cpp functions */
 extern int  load_variables_from_spiffs(void);
 extern int  load_metadata_from_spiffs(void);
+extern int  load_settings_from_spiffs(void);
 extern void free_variables_description_table(variables_description_table_t *tbl);
 extern void free_metadata_table(metadata_table_t *tbl);
 extern void provision_spiffs_xml(void);   /* writes embedded XML defaults to SPIFFS */
@@ -100,6 +102,49 @@ static void handle_get_xml() {
   f.close();
 }
 
+/* ── GET /Settings.xml → generate from live settings struct ── */
+static void handle_get_settings_xml() {
+  if (!require_auth()) return;
+
+  char buf[1024];
+  snprintf(buf, sizeof(buf),
+    "<Settings>\n"
+    "  <row><wifi>"
+      "<SSID>%s</SSID>"
+      "<Password>%s</Password>"
+    "</wifi></row>\n"
+    "  <row><mqtt>"
+      "<Host>%s</Host>"
+      "<Port>%d</Port>"
+      "<Data_Topic>%s</Data_Topic>"
+      "<Alert_Topic>%s</Alert_Topic>"
+    "</mqtt></row>\n"
+    "  <row><schema>"
+      "<Class_Pool_Size>%d</Class_Pool_Size>"
+      "<Var_Pool_Size>%d</Var_Pool_Size>"
+    "</schema></row>\n"
+    "  <row><json>"
+      "<Metadata>%s</Metadata>"
+      "<Constraints>%s</Constraints>"
+      "<Modbus>%s</Modbus>"
+    "</json></row>\n"
+    "</Settings>",
+    settings_wifi.SSID        ? settings_wifi.SSID        : "",
+    settings_wifi.Password    ? settings_wifi.Password    : "",
+    settings_mqtt.Host        ? settings_mqtt.Host        : "",
+    settings_mqtt.Port,
+    settings_mqtt.Data_Topic  ? settings_mqtt.Data_Topic  : "",
+    settings_mqtt.Alert_Topic ? settings_mqtt.Alert_Topic : "",
+    settings_schema.Class_Pool_Size,
+    settings_schema.Var_Pool_Size,
+    settings_json.Metadata    ? "true" : "false",
+    settings_json.Constraints ? "true" : "false",
+    settings_json.Modbus      ? "true" : "false"
+  );
+
+  server.send(200, "application/xml", buf);
+}
+
 /* ── POST /<Table>.xml → save to SPIFFS, reload table ── */
 static void handle_post_xml() {
   if (!require_auth()) return;
@@ -128,6 +173,8 @@ static void handle_post_xml() {
     load_variables_from_spiffs();
   } else if (uri == "/Metadata.xml") {
     load_metadata_from_spiffs();
+  } else if (uri == "/Settings.xml") {
+    load_settings_from_spiffs();
   }
 
   server.send(200, "text/plain", "OK");
@@ -151,7 +198,7 @@ void get_metadata(void)
     if (!cls || !msg) continue;
 
     addr_pool[last_idx] = key;
-    dm_set_value("meta", cls, msg, &addr_pool[last_idx], key);
+    dm_set_value("meta", cls, msg, &addr_pool[last_idx], key, INVALID_INDEX);
     last_idx++;
   }
 
@@ -186,6 +233,9 @@ void acms_web_init(void)
   server.on("/Metadata.xml", HTTP_GET,  handle_get_xml);
   server.on("/Metadata.xml", HTTP_POST, handle_post_xml);
 
+  server.on("/Settings.xml", HTTP_GET,  handle_get_settings_xml);
+  server.on("/Settings.xml", HTTP_POST, handle_post_xml);
+
   server.begin();
   Serial.print("Web server started at http://");
   Serial.println(WiFi.localIP());
@@ -207,17 +257,55 @@ void acms_system_init(const char *login_user, const char *login_pass)
 
   /* ---------------- Core subsystems ---------------- */
   dm_system_init();
-  acms_web_init();     /* mounts SPIFFS, provisions XML, starts webserver */
-  mqtt_connect();
-  get_metadata();      /* parse Metadata.xml → register with data manager → sync */
+  acms_web_init();            /* mounts SPIFFS, provisions XML, starts webserver */
+  get_metadata();             /* parse Metadata.xml → register with data manager → sync */
+  load_variables_from_spiffs(); /* parse Variables.xml → populate description/constraints/modbus tables */
+
+  /* ---- Dump populated struct tables ---- */
+  Serial.printf("\n=== Metadata Table (%d rows) ===\n", metadata_table.count);
+  for (int i = 0; i < metadata_table.count; i++) {
+    Serial.printf("  [%d] Key=%.2f  Message=%s  Class=%s\n", i,
+      metadata_table.rows[i].Key,
+      metadata_table.rows[i].Message ? metadata_table.rows[i].Message : "(null)",
+      metadata_table.rows[i].Class   ? metadata_table.rows[i].Class   : "(null)");
+  }
+
+  Serial.printf("\n=== Variables Description Table (%d rows) ===\n", variables_description_table.count);
+  for (int i = 0; i < variables_description_table.count; i++) {
+    Serial.printf("  [%d] Class=%s  Name=%s  Type=%s  Value=%.4f  constraint_id=%d\n", i,
+      variables_description_table.rows[i].Class ? variables_description_table.rows[i].Class : "(null)",
+      variables_description_table.rows[i].Name  ? variables_description_table.rows[i].Name  : "(null)",
+      variables_description_table.rows[i].Type  ? variables_description_table.rows[i].Type  : "(null)",
+      variables_description_table.rows[i].Value,
+      variables_description_table.rows[i].constraint_id);
+  }
+
+  Serial.printf("\n=== Variables Constraints Table (%d rows) ===\n", variables_constraints_table.count);
+  for (int i = 0; i < variables_constraints_table.count; i++) {
+    Serial.printf("  [%d] Op_ID=%.0f  Threshold=%.2f  Fault_Code=%.0f  Increment=%.4f\n", i,
+      variables_constraints_table.rows[i].Operation_ID,
+      variables_constraints_table.rows[i].Threshold,
+      variables_constraints_table.rows[i].Fault_Code,
+      variables_constraints_table.rows[i].Increment);
+  }
+
+  Serial.printf("\n=== Variables Modbus Table (%d rows) ===\n", variables_modbus_table.count);
+  for (int i = 0; i < variables_modbus_table.count; i++) {
+    Serial.printf("  [%d] Slave_ID=%.0f  Function_ID=%.0f  Start_Address=%.0f  Data_Length=%.0f\n", i,
+      variables_modbus_table.rows[i].Slave_ID,
+      variables_modbus_table.rows[i].Function_ID,
+      variables_modbus_table.rows[i].Start_Address,
+      variables_modbus_table.rows[i].Data_Length);
+  }
+  Serial.println();
 
   /* ---------------- Register sensor variables (ONCE) ---------------- */
-  dm_set_value("Sensor", "Temp",     "float", &temperature, temperature);
-  dm_set_value("Sensor", "Pressure", "float", &pressure,    pressure);
-  dm_set_value("Sensor", "Humidity", "float", &humidity,    humidity);
+  dm_set_value("Sensor", "Temp",     "float", &temperature, temperature, INVALID_INDEX);
+  dm_set_value("Sensor", "Pressure", "float", &pressure,    pressure,    INVALID_INDEX);
+  dm_set_value("Sensor", "Humidity", "float", &humidity,    humidity,    INVALID_INDEX);
 
-  dm_set_value("Power", "Status",  "bool",  &online,  online);
-  dm_set_value("Power", "Voltage", "float", &voltage, voltage);
+  dm_set_value("Power", "Status",  "bool",  &online,  online,   INVALID_INDEX);
+  dm_set_value("Power", "Voltage", "float", &voltage, voltage,  INVALID_INDEX);
   sync_all();
 
   /* Cache class indices for use in loop */

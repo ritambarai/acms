@@ -1,5 +1,5 @@
 /* ---------- FIELD VALIDATOR (generated from XSD) ---------- */
-/* Types found: boolean, float, string */
+/* Types found: boolean, float, integer, string */
 function validateField(input) {
   const type = input.dataset.type;
   const v = input.value.trim();
@@ -19,6 +19,9 @@ function validateField(input) {
       break;
     case "float":
       if (isNaN(v)) msg = "Must be a number";
+      break;
+    case "integer":
+      if (!/^-?\d+$/.test(v)) msg = "Must be a whole number";
       break;
   }
 

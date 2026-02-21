@@ -8,12 +8,28 @@
  *  CONFIG (powers of two)
  * ============================================================ */
 
-#define MAX_CLASS   32
-#define MAX_VAR     2*128
+/* Compile-time upper bounds — used only for static array sizing */
+#define MAX_CLASS_CAP   32
+#define MAX_VAR_CAP     (2 * 128)
 
-#define CLASS_MAP_SIZE  2*(MAX_CLASS - 1)
-#define VAR_MAP_SIZE    2*MAX_VAR
-#define ADDR_MAP_SIZE   2*MAX_VAR
+/* Hashmap table sizes derived from compile-time caps */
+#define CLASS_MAP_SIZE  (2 * (MAX_CLASS_CAP - 1))
+#define VAR_MAP_SIZE    (2 * MAX_VAR_CAP)
+#define ADDR_MAP_SIZE   (2 * MAX_VAR_CAP)
+
+/* Runtime-effective pool sizes — wired to settings_schema via data_manager.c */
+#ifdef __cplusplus
+extern "C" {
+#endif
+int32_t dm_max_class(void);
+int32_t dm_max_var(void);
+#ifdef __cplusplus
+}
+#endif
+
+/* These now return the runtime-configured values (fall back to caps if unset) */
+#define MAX_CLASS   dm_max_class()
+#define MAX_VAR     dm_max_var()
 
 #define INVALID_INDEX   0xFFFFu
 

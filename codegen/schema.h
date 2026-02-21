@@ -82,6 +82,7 @@ typedef struct {
   char* Name;
   char* Type;
   float Value;
+  int constraint_id;   /* index into constraints table, -1 if no constraints row */
 } variables_description_row_t;
 
 #define MAX_VARIABLES_DESCRIPTION_ROWS 128
@@ -212,3 +213,58 @@ static inline bool validate_variables_modbus_value(variables_modbus_col_type_t t
   }
 }
 
+
+/* ═══════ Settings ═══════ */
+
+/* ─── Settings / wifi ─── */
+
+typedef struct {
+  char* SSID;
+  char* Password;
+} settings_wifi_t;
+
+extern settings_wifi_t settings_wifi;
+
+
+/* ─── Settings / mqtt ─── */
+
+typedef struct {
+  char* Host;
+  int32_t Port;
+  char* Data_Topic;
+  char* Alert_Topic;
+} settings_mqtt_t;
+
+extern settings_mqtt_t settings_mqtt;
+
+
+/* ─── Settings / schema ─── */
+
+typedef struct {
+  int32_t Class_Pool_Size;
+  int32_t Var_Pool_Size;
+} settings_schema_t;
+
+extern settings_schema_t settings_schema;
+
+
+/* ─── Settings / json ─── */
+
+typedef struct {
+  bool Metadata;
+  bool Constraints;
+  bool Modbus;
+} settings_json_t;
+
+extern settings_json_t settings_json;
+
+
+/* ── Runtime pool-size accessors (defaults when struct value is 0) ── */
+
+static inline int32_t effective_var_pool_size(void) {
+  return settings_schema.Var_Pool_Size > 0 ? settings_schema.Var_Pool_Size : 128;
+}
+
+static inline int32_t effective_class_pool_size(void) {
+  return settings_schema.Class_Pool_Size > 0 ? settings_schema.Class_Pool_Size : 32;
+}

@@ -195,9 +195,23 @@ button {
 
 .settings-form-grid {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 10px;
   align-items: flex-end;
+}
+
+.settings-save-btn {
+  padding: 2px 10px;
+  font-size: 11px;
+  white-space: nowrap;
+  align-self: flex-end;
+}
+
+.settings-checkbox {
+  display: block;
+  margin: 4px auto 0;
+  width: auto;
+  cursor: pointer;
 }
 
 .settings-field {
@@ -239,6 +253,82 @@ button {
     <button class="toggle-btn" onclick="toggleSettingsSection('Settings', this)">&#9660;</button>
   </h3>
   <div id="Settings_collapsible" style="display:none">
+    <div class="subcat-row">
+      <span class="subcat-label">wifi</span>
+      <div class="form-grid">
+        <div class="field">
+          <label>SSID</label>
+          <input placeholder="string" data-type="string" data-name="SSID" oninput="validateField(this)">
+          <span class="error-msg"></span>
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input placeholder="string" data-type="string" data-name="Password" oninput="validateField(this)">
+          <span class="error-msg"></span>
+        </div>
+      </div>
+    </div>
+    <div class="subcat-row">
+      <span class="subcat-label">mqtt</span>
+      <div class="form-grid">
+        <div class="field">
+          <label>Host</label>
+          <input placeholder="string" data-type="string" data-name="Host" oninput="validateField(this)">
+          <span class="error-msg"></span>
+        </div>
+        <div class="field">
+          <label>Port</label>
+          <input placeholder="integer" data-type="integer" data-name="Port" oninput="validateField(this)">
+          <span class="error-msg"></span>
+        </div>
+        <div class="field">
+          <label>Data Topic</label>
+          <input placeholder="string" data-type="string" data-name="Data_Topic" oninput="validateField(this)">
+          <span class="error-msg"></span>
+        </div>
+        <div class="field">
+          <label>Alert Topic</label>
+          <input placeholder="string" data-type="string" data-name="Alert_Topic" oninput="validateField(this)">
+          <span class="error-msg"></span>
+        </div>
+      </div>
+    </div>
+    <div class="subcat-row">
+      <span class="subcat-label">schema</span>
+      <div class="form-grid">
+        <div class="field">
+          <label>Class Pool Size</label>
+          <input placeholder="integer" data-type="integer" data-name="Class_Pool_Size" oninput="validateField(this)">
+          <span class="error-msg"></span>
+        </div>
+        <div class="field">
+          <label>Var Pool Size</label>
+          <input placeholder="integer" data-type="integer" data-name="Var_Pool_Size" oninput="validateField(this)">
+          <span class="error-msg"></span>
+        </div>
+      </div>
+    </div>
+    <div class="subcat-row">
+      <span class="subcat-label">json</span>
+      <div class="form-grid">
+        <div class="field">
+          <label>Metadata</label>
+          <input type="checkbox" data-type="boolean" data-name="Metadata" class="settings-checkbox">
+          <span class="error-msg"></span>
+        </div>
+        <div class="field">
+          <label>Constraints</label>
+          <input type="checkbox" data-type="boolean" data-name="Constraints" class="settings-checkbox">
+          <span class="error-msg"></span>
+        </div>
+        <div class="field">
+          <label>Modbus</label>
+          <input type="checkbox" data-type="boolean" data-name="Modbus" class="settings-checkbox">
+          <span class="error-msg"></span>
+        </div>
+      </div>
+    </div>
+    <button onclick="saveSettings()" class="insert-btn">Save</button>
   </div>
 </div>
 
@@ -425,6 +515,13 @@ var Variables_SCHEMA = [
 
 var TABLE_LIST = ["Metadata", "Variables"];
 
+var Settings_SUBCATS = {
+  wifi: ["SSID", "Password"],
+  mqtt: ["Host", "Port", "Data_Topic", "Alert_Topic"],
+  schema: ["Class_Pool_Size", "Var_Pool_Size"],
+  json: ["Metadata", "Constraints", "Modbus"]
+};
+
 
 /* ======== PRELOADED XML (embedded at build time) ======== */
 var PRELOAD_XML = {
@@ -471,6 +568,9 @@ window.addEventListener("DOMContentLoaded", () => {
       loadTable(table, schema, _onTableLoaded);
     }
   });
+
+  state["Settings"] = {};
+  loadSettings();
 
 });
 
@@ -742,6 +842,9 @@ function downloadZIP() {
     name: t + ".xml",
     data: rowsToXML(t, window[t + "_SCHEMA"])
   }));
+  if (Object.keys(state["Settings"] || {}).length > 0) {
+    files.push({ name: "Settings.xml", data: settingsToXML() });
+  }
   const zip  = createZIP(files);
   const blob = new Blob([zip], { type: "application/zip" });
   const a    = document.createElement("a");
@@ -750,6 +853,69 @@ function downloadZIP() {
   document.body.appendChild(a);
   a.click();
   a.remove();
+}
+
+
+/* ---------- SAVE SETTINGS (stores to state + logs to console) ---------- */
+function saveSettings() {
+  state["Settings"] = {};
+  document.querySelectorAll(".settings-bar input[data-name]").forEach(function(inp) {
+    if (inp.dataset.name === "Download_a_copy") return;
+    var val = inp.type === "checkbox" ? String(inp.checked) : inp.value.trim();
+    state["Settings"][inp.dataset.name] = val;
+  });
+  console.group("[ACMS] Settings state");
+  console.table(state["Settings"]);
+  console.groupEnd();
+}
+
+
+/* ---------- SETTINGS TO XML ---------- */
+/* Produces one <row> per subcategory — 4 rows total matching the XSD. */
+function settingsToXML() {
+  var xml = "<Settings>\n";
+  Object.keys(Settings_SUBCATS).forEach(function(sc) {
+    xml += "  <row><" + sc + ">";
+    Settings_SUBCATS[sc].forEach(function(field) {
+      var val = (state["Settings"][field] !== undefined) ? state["Settings"][field] : "";
+      xml += "<" + field + ">" + val + "</" + field + ">";
+    });
+    xml += "</" + sc + "></row>\n";
+  });
+  xml += "</Settings>";
+  return xml;
+}
+
+
+/* ---------- LOAD SETTINGS (ESP only — populate inputs + state from /Settings.xml) ---------- */
+function loadSettings() {
+  if (location.hostname === "") return;
+  fetch("/Settings.xml", { cache: "no-store" })
+    .then(function(r) { if (r.ok) return r.text(); })
+    .then(function(xml) {
+      if (!xml) return;
+      var parser = new DOMParser();
+      var doc = parser.parseFromString(xml, "application/xml");
+      state["Settings"] = {};
+      var rows = doc.getElementsByTagName("row");
+      for (var i = 0; i < rows.length; i++) {
+        Object.keys(Settings_SUBCATS).forEach(function(sc) {
+          var scEl = rows[i].getElementsByTagName(sc)[0];
+          if (!scEl) return;
+          Settings_SUBCATS[sc].forEach(function(field) {
+            var el = scEl.getElementsByTagName(field)[0];
+            if (!el) return;
+            var val = el.textContent.trim();
+            state["Settings"][field] = val;
+            var inp = document.querySelector(".settings-bar input[data-name='" + field + "']");
+            if (!inp) return;
+            if (inp.type === "checkbox") inp.checked = (val === "true");
+            else inp.value = val;
+          });
+        });
+      }
+    })
+    .catch(function() {});
 }
 
 
@@ -778,6 +944,15 @@ async function submitAll() {
         if (!r.ok) throw new Error(t + " save failed (" + r.status + ")");
       }
 
+      if (Object.keys(state["Settings"] || {}).length > 0) {
+        const r = await fetch("/Settings.xml", {
+          method: "POST",
+          headers: { "Content-Type": "application/xml" },
+          body: settingsToXML()
+        });
+        if (!r.ok) throw new Error("Settings save failed (" + r.status + ")");
+      }
+
       if (dlChecked) downloadZIP();
 
       await fetch("/reboot", { method: "POST" }).catch(() => {});
@@ -794,13 +969,18 @@ async function submitAll() {
     if (dlChecked) {
       downloadZIP();
     } else {
-      TABLE_LIST.filter(t => state[t].length > 0).forEach((t, idx) => {
-        const xml = rowsToXML(t, window[t + "_SCHEMA"]);
+      const toDownload = TABLE_LIST.filter(t => state[t].length > 0).map(t => ({
+        name: t + ".xml", data: rowsToXML(t, window[t + "_SCHEMA"])
+      }));
+      if (Object.keys(state["Settings"] || {}).length > 0) {
+        toDownload.push({ name: "Settings.xml", data: settingsToXML() });
+      }
+      toDownload.forEach(({ name, data }, idx) => {
         setTimeout(() => {
-          const blob = new Blob([xml], { type: "application/xml" });
+          const blob = new Blob([data], { type: "application/xml" });
           const a = document.createElement("a");
           a.href = URL.createObjectURL(blob);
-          a.download = t + ".xml";
+          a.download = name;
           document.body.appendChild(a);
           a.click();
           a.remove();
@@ -814,7 +994,7 @@ async function submitAll() {
 
 /* ======== FIELD VALIDATOR + VALIDITY CHECKER (INJECTED FROM CODEGEN) ======== */
 /* ---------- FIELD VALIDATOR (generated from XSD) ---------- */
-/* Types found: boolean, float, string */
+/* Types found: boolean, float, integer, string */
 function validateField(input) {
   const type = input.dataset.type;
   const v = input.value.trim();
@@ -834,6 +1014,9 @@ function validateField(input) {
       break;
     case "float":
       if (isNaN(v)) msg = "Must be a number";
+      break;
+    case "integer":
+      if (!/^-?\d+$/.test(v)) msg = "Must be a whole number";
       break;
   }
 

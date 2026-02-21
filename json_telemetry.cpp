@@ -2,20 +2,17 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <WiFi.h>
-#include <PubSubClient.h>
 #include <HTTPClient.h>
+#include "network_manager.h"
 #include "json_telemetry.h"
 #include "data_manager.h"
+extern "C" {
+#include "schema.h"   /* settings_mqtt_t settings_mqtt */
+}
 
 StaticJsonDocument<12288> doc;  // 12 KB
 static const char *api_url = "https://acms-sustlabs.vercel.app/api/data";
 static const char *CMD_URL  = "https://acms-sustlabs.vercel.app/api/cmd";
-
-const char* mqtt_server = "mqtt-server.ddns.net";
-const int   mqtt_port   = 1883;   // NOT 8083 (8083 is WebSocket)
-
-WiFiClient espClient;
-PubSubClient mqtt(espClient);
 
 
 /* =========================================================
@@ -26,23 +23,6 @@ static float value_pool[MAX_REMOTE_VARS];
 static bool  value_used[MAX_REMOTE_VARS];
 static uint16_t value_last_idx = 0;
 
-
-
-void mqtt_connect() {
-  mqtt.setServer(mqtt_server, mqtt_port);
-  mqtt.setBufferSize(MAX_MQTT_SIZE);
-
-    while (!mqtt.connected()) {
-        Serial.print("🔌 MQTT connecting...");
-        if (mqtt.connect("ACMS_Rey_ESP32")) {
-            Serial.println(" connected");
-        } else {
-            Serial.print(" failed, rc=");
-            Serial.println(mqtt.state());
-            delay(2000);
-        }
-    }
-}
 
 
 /* =========================================================
@@ -73,7 +53,7 @@ void json_add_var(uint16_t var_idx)
 {
     //if (!used_var[var_idx])
     //    return;
-    Serial.println(String("Var ID received: ") + var_idx );
+    //Serial.println(String("Var ID received: ") + var_idx );
     //Serial.println(String("Var used: ") + used_var[var_idx] );
     var_t   *v   = &var_pool[var_idx];
     class_t *cls = &class_pool[v->class_idx];
@@ -107,8 +87,12 @@ void json_add_var(uint16_t var_idx)
     }
 
     /* Update / overwrite fields */
-    obj["name"] = v->var_name;
-    obj["type"] = v->var_type ? v->var_type : "";
+    obj["name"]          = v->var_name;
+    obj["type"]          = v->var_type ? v->var_type : "";
+    if (v->constraint_idx == INVALID_INDEX)
+        obj["constraint_id"] = nullptr;
+    else
+        obj["constraint_id"] = v->constraint_idx;
 
     char val_buf[32];
     snprintf(val_buf, sizeof(val_buf), "%.2f", v->cached_val);
@@ -151,35 +135,35 @@ void json_remove_var(uint16_t var_idx)
 void json_send(void)
 {
     if (WiFi.status() != WL_CONNECTED) {
-        Serial.println("❌ WiFi not connected, JSON dropped");
+        Serial.println("[WiFi] Not connected, JSON dropped");
         return;
     }
 
-    if (!mqtt.connected()) {
-        mqtt_connect();
+    if (!mqtt_manager_connected()) {
+        Serial.println("[MQTT] Not connected, JSON dropped");
+        return;
     }
 
     if (doc.isNull() || doc.size() == 0) {
-        Serial.println("⚠️ JSON empty, nothing to send");
+        //Serial.println("⚠️ JSON empty, nothing to send");
         return;
     }
 
     String payload;
     serializeJson(doc, payload);
 
-    Serial.println("➡ Publishing JSON:");
-    Serial.println(payload);
-    Serial.print("Payload size: ");
-    Serial.println(payload.length());
+    //Serial.println("➡ Publishing JSON:");
+    //Serial.println(payload);
+    //Serial.print("Payload size: ");
+    //Serial.println(payload.length());
 
+    bool ok = mqtt_manager_publish(settings_mqtt.Data_Topic, payload.c_str(), true);
 
-    bool ok = mqtt.publish("test/ACMS_Rey/01", payload.c_str(),true);
-
-    if (ok) {
-        Serial.println("✅ MQTT publish OK");
-    } else {
-        Serial.println("❌ MQTT publish FAILED");
-    }
+    //if (ok) {
+    //    Serial.println("✅ MQTT publish OK");
+    //} else {
+    //    Serial.println("❌ MQTT publish FAILED");
+    //}
 }
 
 void json_send_http(void)
@@ -431,10 +415,11 @@ void json_receive(void)
      * ===================================================== */
     if (strcmp(cmd, "set_var") == 0) {
 
-        const char *cls  = rx["class"];
-        const char *var  = rx["var"];
-        const char *type = rx["type"];
-        float value      = rx["value"] | 0.0f;
+        const char *cls   = rx["class"];
+        const char *var   = rx["var"];
+        const char *type  = rx["type"];
+        float value       = rx["value"] | 0.0f;
+        uint16_t cid      = rx["constraint_id"] | INVALID_INDEX;
 
         if (!cls || !var || !type) {
             send_response("error", "", "", 0, "missing fields");
@@ -447,7 +432,7 @@ void json_receive(void)
             return;
         }
 
-        if (!dm_set_value(cls, type, var, ext, value)) {
+        if (!dm_set_value(cls, type, var, ext, value, cid)) {
             send_response("error", cls, var, 0, "dm_set_value failed");
             return;
         }

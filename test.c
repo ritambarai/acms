@@ -31,13 +31,13 @@ static void dm_test_basic(void)
      * SET VALUES (CLASS: SENSOR)
      * -------------------------------------------------------- */
     dm_set_value("sensor", "temperature",
-                 "float", &temperature, temperature);
+                 "float", &temperature, temperature, 0);
 
     dm_set_value("sensor", "humidity",
-                 "float", &humidity, humidity);
+                 "float", &humidity, humidity, 0);
 
     dm_set_value("sensor", "pressure",
-                 "float", &pressure, pressure);
+                 "float", &pressure, pressure, 0);
 
     printf("Sensor values registered\n");
 
@@ -47,7 +47,7 @@ static void dm_test_basic(void)
     temperature = 26.8f;
     get_value(&temperature);
     dm_set_value("sensor", "temperature",
-                 "float", &temperature, temperature);
+                 "float", &temperature, temperature, 0);
 
     printf("Temperature updated\n");
     
@@ -60,7 +60,7 @@ static void dm_test_basic(void)
      * SET VALUES (CLASS: POWER)
      * -------------------------------------------------------- */
     dm_set_value("power", "voltage",
-                 "float", &voltage, voltage);
+                 "float", &voltage, voltage, 0);
 
     printf("Power values registered\n");
     voltage = 240.0f;
@@ -97,7 +97,7 @@ static void dm_test_basic(void)
     update_variable(&temperature);
     sync_class(sensor_idx);
     dm_set_value("sensor", "status",
-                 "bool", &status, status);
+                 "bool", &status, status, 0);
     get_class_values("sensor");  
 }
 
