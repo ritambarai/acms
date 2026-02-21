@@ -1,5 +1,5 @@
 /* ---------- FIELD VALIDATOR (generated from XSD) ---------- */
-/* Types found: float, string */
+/* Types found: boolean, float, string */
 function validateField(input) {
   const type = input.dataset.type;
   const v = input.value.trim();
@@ -14,6 +14,9 @@ function validateField(input) {
   let msg = "";
 
   switch (type) {
+    case "boolean":
+      if (v !== "true" && v !== "false") msg = "Must be true or false";
+      break;
     case "float":
       if (isNaN(v)) msg = "Must be a number";
       break;
@@ -53,6 +56,38 @@ function buildMetadataDict() {
       if (!dict[cls]) dict[cls] = {};
       if (key !== null) dict[cls][key] = msg || "";
     }
+  });
+  return dict;
+}
+
+/* Build nested Variable dict: { Class: { Name: { TypeVal: { field: value, ... } } } } */
+function buildVariableDict() {
+  var dict = {};
+  if (!state["Variables"]) return dict;
+  var schema = (typeof Variables_SCHEMA !== "undefined") ? Variables_SCHEMA : [];
+  var classIdx = -1, nameIdx = -1, typeIdx = -1;
+  for (var i = 0; i < schema.length; i++) {
+    if (schema[i].name === "Class") classIdx = i;
+    else if (schema[i].name === "Name") nameIdx = i;
+    else if (schema[i].name === "Type") typeIdx = i;
+  }
+  if (classIdx < 0 || nameIdx < 0 || typeIdx < 0) return dict;
+  state["Variables"].forEach(function(row) {
+    var cls = row[classIdx];
+    var name = row[nameIdx];
+    var type = row[typeIdx];
+    if (cls === null || cls === undefined) return;
+    if (!dict[cls]) dict[cls] = {};
+    if (name === null || name === undefined) return;
+    if (!dict[cls][name]) dict[cls][name] = {};
+    if (type === null || type === undefined) return;
+    var info = {};
+    for (var i = 0; i < schema.length; i++) {
+      if (i !== classIdx && i !== nameIdx && i !== typeIdx) {
+        info[schema[i].name] = row[i];
+      }
+    }
+    dict[cls][name][type] = info;
   });
   return dict;
 }
@@ -100,14 +135,14 @@ function validateValidityField(input) {
 
   var dict = buildMetadataDict();
 
-  /* ── Name field: stepped check — type row → bool shortcut → unit row ── */
+  /* ── Name field: stepped check using nested Variable dict ── */
   if (fieldName === "Name") {
     var form = input.closest('[id$="_form"]');
     var typeInput = form ? form.querySelector('[data-name="Type"]') : null;
     var typeVal = typeInput ? typeInput.value.trim().toLowerCase() : "";
     var half = input.closest(".half");
     var insertBtn = half ? half.querySelector(".insert-btn") : null;
-    if (typeVal === "type" || typeVal === "units" || typeVal === "validity") {
+    if (typeVal === "type" || typeVal === "units" || typeVal === "verification") {
       input.style.borderColor = "";
       input.classList.remove("invalid");
       errSpan.textContent = "";
@@ -117,21 +152,13 @@ function validateValidityField(input) {
     }
     var classInput = form ? form.querySelector('[data-name="Class"]') : null;
     var classVal = classInput ? classInput.value.trim() : "";
-    var varSchema = (typeof Variables_SCHEMA !== "undefined") ? Variables_SCHEMA : [];
-    var classIdx = -1, typeIdx = -1, valueIdx = -1, nameIdx = -1;
-    for (var i = 0; i < varSchema.length; i++) {
-      if (varSchema[i].name === "Class") classIdx = i;
-      if (varSchema[i].name === "Type")  typeIdx  = i;
-      if (varSchema[i].name === "Value") valueIdx = i;
-      if (varSchema[i].name === "Name")  nameIdx  = i;
-    }
-    var varRows = (state && state["Variables"]) ? state["Variables"] : [];
-    /* gate on class existence first so type/unit alerts can fire */
-    var classRows = varRows.filter(function(row) {
-      return classIdx >= 0 && row[classIdx] && classVal &&
-             row[classIdx].toLowerCase() === classVal.toLowerCase();
+    var varDict = buildVariableDict();
+
+    /* ── Step 0: check class exists in Variables ── */
+    var classKey = Object.keys(varDict).find(function(k) {
+      return k.toLowerCase() === classVal.toLowerCase();
     });
-    if (classRows.length === 0) {
+    if (!classKey) {
       input.style.borderColor = "red";
       input.classList.add("invalid");
       errSpan.textContent = "NO MATCH";
@@ -141,15 +168,27 @@ function validateValidityField(input) {
       return false;
     }
 
-    /* ── Step 1: type row must exist ── */
-    var typeRow = null;
-    for (var j = 0; j < classRows.length; j++) {
-      if (typeIdx >= 0 && classRows[j][typeIdx] &&
-          classRows[j][typeIdx].toLowerCase() === "type") {
-        typeRow = classRows[j]; break;
-      }
+    /* ── Step 1: check name exists in class ── */
+    var nameKey = Object.keys(varDict[classKey]).find(function(k) {
+      return k.toLowerCase() === v.toLowerCase();
+    });
+    if (!nameKey) {
+      input.style.borderColor = "red";
+      input.classList.add("invalid");
+      errSpan.textContent = "NO MATCH";
+      errSpan.style.color = "red";
+      if (insertBtn) insertBtn.disabled = true;
+      input.dataset.lastAlert = "";
+      return false;
     }
-    if (!typeRow) {
+
+    var nameDict = varDict[classKey][nameKey];
+
+    /* ── Step 2: type row must exist ── */
+    var typeRowKey = Object.keys(nameDict).find(function(k) {
+      return k.toLowerCase() === "type";
+    });
+    if (!typeRowKey) {
       input.style.borderColor = "red";
       input.classList.add("invalid");
       errSpan.textContent = "NO TYPE";
@@ -158,48 +197,33 @@ function validateValidityField(input) {
       return false;
     }
 
-    /* ── Step 2: resolve type label from Metadata ── */
+    /* ── Step 3: resolve type label from Metadata ── */
+    var tKeyVal = (nameDict[typeRowKey]["Value"] !== null && nameDict[typeRowKey]["Value"] !== undefined)
+      ? String(nameDict[typeRowKey]["Value"]) : "";
+    /* normalize float key: "1.0" → "1" so it matches Metadata Key column */
+    var tKeyNorm = (tKeyVal !== "" && isFinite(tKeyVal)) ? String(parseFloat(tKeyVal)) : tKeyVal;
     var tClassKey = Object.keys(dict).find(function(k) {
       return k.toLowerCase() === "type";
     }) || "type";
-    var tKeyVal = (typeRow[valueIdx] !== null && typeRow[valueIdx] !== undefined)
-      ? String(typeRow[valueIdx]) : "";
-    var typeLabel = (dict[tClassKey] && dict[tClassKey].hasOwnProperty(tKeyVal))
-      ? dict[tClassKey][tKeyVal].toLowerCase() : "";
+    var typeLabel = (dict[tClassKey] && dict[tClassKey].hasOwnProperty(tKeyNorm))
+      ? dict[tClassKey][tKeyNorm].toLowerCase() : "";
     input.style.borderColor = "green";
     input.classList.remove("invalid");
     errSpan.textContent = typeLabel.toUpperCase();
     errSpan.style.color = "green";
     input.dataset.lastAlert = "";
 
-    /* ── Step 3: bool/choice → skip unit check, still validate name ── */
+    /* ── Step 4: bool/choice → name already validated in Step 1 ── */
     if (typeLabel === "bool" || typeLabel === "choice") {
-      var boolNameMatch = classRows.some(function(row) {
-        return nameIdx >= 0 && row[nameIdx] && v &&
-               row[nameIdx].toLowerCase() === v.toLowerCase();
-      });
-      if (!boolNameMatch) {
-        input.style.borderColor = "red";
-        input.classList.add("invalid");
-        errSpan.textContent = "NO MATCH";
-        errSpan.style.color = "red";
-        if (insertBtn) insertBtn.disabled = true;
-        input.dataset.lastAlert = "";
-        return false;
-      }
       if (insertBtn) insertBtn.disabled = false;
       return true;
     }
 
-    /* ── Step 4: non-bool → unit row must exist ── */
-    var unitRow = null;
-    for (var k = 0; k < classRows.length; k++) {
-      if (typeIdx >= 0 && classRows[k][typeIdx] &&
-          classRows[k][typeIdx].toLowerCase() === "unit") {
-        unitRow = classRows[k]; break;
-      }
-    }
-    if (!unitRow) {
+    /* ── Step 5: non-bool → unit row must exist ── */
+    var unitRowKey = Object.keys(nameDict).find(function(k) {
+      return k.toLowerCase() === "unit";
+    });
+    if (!unitRowKey) {
       input.style.borderColor = "red";
       input.classList.add("invalid");
       errSpan.textContent = "NO UNIT";
@@ -208,29 +232,17 @@ function validateValidityField(input) {
       return false;
     }
 
-    /* ── Step 5: resolve unit message from Metadata (use classVal class only) ── */
-    var uKeyVal = (unitRow[valueIdx] !== null && unitRow[valueIdx] !== undefined)
-      ? String(unitRow[valueIdx]) : "";
+    /* ── Step 6: resolve unit message from Metadata (use classKey class only) ── */
+    var uKeyVal = (nameDict[unitRowKey]["Value"] !== null && nameDict[unitRowKey]["Value"] !== undefined)
+      ? String(nameDict[unitRowKey]["Value"]) : "";
+    /* normalize float key: "1.0" → "1" so it matches Metadata Key column */
+    var uKeyNorm = (uKeyVal !== "" && isFinite(uKeyVal)) ? String(parseFloat(uKeyVal)) : uKeyVal;
     var uClassKey = Object.keys(dict).find(function(k) {
-      return k.toLowerCase() === classVal.toLowerCase();
+      return k.toLowerCase() === classKey.toLowerCase();
     });
-    var uMsg = (uClassKey && dict[uClassKey].hasOwnProperty(uKeyVal))
-      ? dict[uClassKey][uKeyVal] : null;
+    var uMsg = (uClassKey && dict[uClassKey].hasOwnProperty(uKeyNorm))
+      ? dict[uClassKey][uKeyNorm] : null;
     if (uMsg !== null) {
-      /* ── Step 5b: name must also exist in this class ── */
-      var nameMatch = classRows.some(function(row) {
-        return nameIdx >= 0 && row[nameIdx] && v &&
-               row[nameIdx].toLowerCase() === v.toLowerCase();
-      });
-      if (!nameMatch) {
-        input.style.borderColor = "red";
-        input.classList.add("invalid");
-        errSpan.textContent = "NO MATCH";
-        errSpan.style.color = "red";
-        if (insertBtn) insertBtn.disabled = true;
-        input.dataset.lastAlert = "";
-        return false;
-      }
       input.style.borderColor = "green";
       input.classList.remove("invalid");
       errSpan.textContent = uMsg.toUpperCase();

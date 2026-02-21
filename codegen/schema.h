@@ -61,24 +61,27 @@ typedef enum {
   COL_VARIABLES_DESCRIPTION_CLASS_STRING,
   COL_VARIABLES_DESCRIPTION_NAME_STRING,
   COL_VARIABLES_DESCRIPTION_TYPE_STRING,
+  COL_VARIABLES_DESCRIPTION_VALUE_FLOAT,
 } variables_description_col_type_t;
 
-#define VARIABLES_DESCRIPTION_COL_COUNT 3
+#define VARIABLES_DESCRIPTION_COL_COUNT 4
 
 static const variables_description_col_type_t variables_description_column_types[VARIABLES_DESCRIPTION_COL_COUNT] = {
   COL_VARIABLES_DESCRIPTION_CLASS_STRING,
   COL_VARIABLES_DESCRIPTION_NAME_STRING,
   COL_VARIABLES_DESCRIPTION_TYPE_STRING,
+  COL_VARIABLES_DESCRIPTION_VALUE_FLOAT,
 };
 
 static const char *variables_description_column_names[VARIABLES_DESCRIPTION_COL_COUNT] = {
-  "Class", "Name", "Type"
+  "Class", "Name", "Type", "Value"
 };
 
 typedef struct {
   char* Class;
   char* Name;
   char* Type;
+  float Value;
 } variables_description_row_t;
 
 #define MAX_VARIABLES_DESCRIPTION_ROWS 128
@@ -93,60 +96,62 @@ extern variables_description_table_t variables_description_table;
 
 static inline bool validate_variables_description_value(variables_description_col_type_t type, const char *v) {
   if (!v || v[0] == '\0') return true;
-  return true;
+  switch (type) {
+    case COL_VARIABLES_DESCRIPTION_VALUE_FLOAT:
+      return isfinite(atof(v));
+    default:
+      return true;
+  }
 }
 
 
-/* ─── Variables / values ─── */
+/* ─── Variables / constraints ─── */
 
 typedef enum {
-  COL_VARIABLES_VALUES_VALUE_FLOAT,
-  COL_VARIABLES_VALUES_OPERATION_ID_FLOAT,
-  COL_VARIABLES_VALUES_THRESHOLD_FLOAT,
-  COL_VARIABLES_VALUES_FAULT_CODE_FLOAT,
-  COL_VARIABLES_VALUES_INCREMENT_FLOAT,
-} variables_values_col_type_t;
+  COL_VARIABLES_CONSTRAINTS_OPERATION_ID_FLOAT,
+  COL_VARIABLES_CONSTRAINTS_THRESHOLD_FLOAT,
+  COL_VARIABLES_CONSTRAINTS_FAULT_CODE_FLOAT,
+  COL_VARIABLES_CONSTRAINTS_INCREMENT_FLOAT,
+} variables_constraints_col_type_t;
 
-#define VARIABLES_VALUES_COL_COUNT 5
+#define VARIABLES_CONSTRAINTS_COL_COUNT 4
 
-static const variables_values_col_type_t variables_values_column_types[VARIABLES_VALUES_COL_COUNT] = {
-  COL_VARIABLES_VALUES_VALUE_FLOAT,
-  COL_VARIABLES_VALUES_OPERATION_ID_FLOAT,
-  COL_VARIABLES_VALUES_THRESHOLD_FLOAT,
-  COL_VARIABLES_VALUES_FAULT_CODE_FLOAT,
-  COL_VARIABLES_VALUES_INCREMENT_FLOAT,
+static const variables_constraints_col_type_t variables_constraints_column_types[VARIABLES_CONSTRAINTS_COL_COUNT] = {
+  COL_VARIABLES_CONSTRAINTS_OPERATION_ID_FLOAT,
+  COL_VARIABLES_CONSTRAINTS_THRESHOLD_FLOAT,
+  COL_VARIABLES_CONSTRAINTS_FAULT_CODE_FLOAT,
+  COL_VARIABLES_CONSTRAINTS_INCREMENT_FLOAT,
 };
 
-static const char *variables_values_column_names[VARIABLES_VALUES_COL_COUNT] = {
-  "Value", "Operation_ID", "Threshold", "Fault_Code", "Increment"
+static const char *variables_constraints_column_names[VARIABLES_CONSTRAINTS_COL_COUNT] = {
+  "Operation_ID", "Threshold", "Fault_Code", "Increment"
 };
 
 typedef struct {
-  float Value;
   float Operation_ID;
   float Threshold;
   float Fault_Code;
   float Increment;
-} variables_values_row_t;
+  float *value_ptr;   /* points to description struct Value field */
+} variables_constraints_row_t;
 
-#define MAX_VARIABLES_VALUES_ROWS 128
+#define MAX_VARIABLES_CONSTRAINTS_ROWS 128
 
 typedef struct {
-  variables_values_row_t rows[MAX_VARIABLES_VALUES_ROWS];
+  variables_constraints_row_t rows[MAX_VARIABLES_CONSTRAINTS_ROWS];
   int count;
   int version;
-} variables_values_table_t;
+} variables_constraints_table_t;
 
-extern variables_values_table_t variables_values_table;
+extern variables_constraints_table_t variables_constraints_table;
 
-static inline bool validate_variables_values_value(variables_values_col_type_t type, const char *v) {
+static inline bool validate_variables_constraints_value(variables_constraints_col_type_t type, const char *v) {
   if (!v || v[0] == '\0') return true;
   switch (type) {
-    case COL_VARIABLES_VALUES_VALUE_FLOAT:
-    case COL_VARIABLES_VALUES_OPERATION_ID_FLOAT:
-    case COL_VARIABLES_VALUES_THRESHOLD_FLOAT:
-    case COL_VARIABLES_VALUES_FAULT_CODE_FLOAT:
-    case COL_VARIABLES_VALUES_INCREMENT_FLOAT:
+    case COL_VARIABLES_CONSTRAINTS_OPERATION_ID_FLOAT:
+    case COL_VARIABLES_CONSTRAINTS_THRESHOLD_FLOAT:
+    case COL_VARIABLES_CONSTRAINTS_FAULT_CODE_FLOAT:
+    case COL_VARIABLES_CONSTRAINTS_INCREMENT_FLOAT:
       return isfinite(atof(v));
     default:
       return true;
@@ -181,7 +186,7 @@ typedef struct {
   float Function_ID;
   float Start_Address;
   float Data_Length;
-  float *value_ptr;   /* points to values struct Value field */
+  float *value_ptr;   /* points to description struct Value field */
 } variables_modbus_row_t;
 
 #define MAX_VARIABLES_MODBUS_ROWS 128

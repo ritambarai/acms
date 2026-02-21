@@ -69,11 +69,24 @@ body {
   display: inline;
 }
 
-#submit-btn {
+#submit-area {
   position: absolute;
   right: 16px;
   top: 50%;
   transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.check-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
 }
 
 .category-header {
@@ -162,14 +175,58 @@ button {
   padding: 3px 10px;
   font-size: 12px;
 }
+
+/* ===== SETTINGS BAR ===== */
+.settings-bar {
+  padding: 4px 12px 6px;
+  border-bottom: 2px solid #ccc;
+}
+
+.settings-category {
+  margin: 2px 0 4px;
+}
+
+.settings-compact .subcat-label {
+  font-size: 10px;
+}
+
+.settings-form-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.settings-field {
+  min-width: 110px;
+}
+
+.settings-field label {
+  display: block;
+  font-size: 11px;
+  text-align: center;
+}
+
+.settings-field input {
+  width: 100%;
+  padding: 2px 5px;
+  font-size: 11px;
+  box-sizing: border-box;
+}
 </style>
 </head>
 
 <body>
 <div class="main-header">
   <h1>ACMS Master Portal</h1>
-  <button id="submit-btn" onclick="submitAll()">Submit</button>
+  <div id="submit-area">
+    <button id="submit-btn" onclick="submitAll()">Submit</button>
+    %HEADERS_BLOCK%
+  </div>
 </div>
+
+<!-- ======== SETTINGS BAR (INJECTED FROM XSD) ======== -->
+%SETTINGS_BLOCK%
 
 <!-- ======== TABLE BLOCKS (INJECTED FROM XSD) ======== -->
 %TABLE_BLOCKS%
@@ -184,271 +241,15 @@ var PRELOAD_XML = {
 %PRELOAD_XML%
 };
 
-/* ======== STABLE JS LOGIC ======== */
-
-let state = {};
-
-/* ---------- INITIALIZATION ---------- */
-window.addEventListener("DOMContentLoaded", () => {
-
-  /* Compute MAX_COLUMNS safely (cap at 7 per row) */
-  const schemas = TABLE_LIST.map(t => window[t + "_SCHEMA"]);
-  const MAX_COLUMNS = Math.min(6, Math.max(...schemas.map(s => s.length)));
-
-  const MIN_GAP = 14;
-
-  /* Compute fixed field width */
-  const FIELD_WIDTH = `calc((100% - ${(MAX_COLUMNS - 1) * MIN_GAP}px) / ${MAX_COLUMNS})`;
-
-  document.documentElement.style.setProperty("--field-width", FIELD_WIDTH);
-
-  /* Initialize each table */
-  TABLE_LIST.forEach(table => {
-
-    const schema = window[table + "_SCHEMA"];
-    state[table] = [];
-
-    buildForm(table);
-
-    /* load from embedded XML (PC) or fetch from SPIFFS (ESP) */
-    if (PRELOAD_XML[table]) {
-      parseXML(PRELOAD_XML[table], table, schema);
-    } else {
-      loadTable(table, schema);
-    }
-  });
-
-});
+/* ======== STABLE JS LOGIC (INJECTED FROM CODEGEN) ======== */
+%STABLE_JS%
 
 
-/* ---------- BUILD FORM ---------- */
-function buildForm(table) {
-  // Flex layout already handles spacing.
-  // Nothing required here for layout.
-}
-
-
+/* ======== FIELD VALIDATOR + VALIDITY CHECKER (INJECTED FROM CODEGEN) ======== */
 %VALIDATOR_JS%
-
-
-/* ---------- INSERT ROW ---------- */
-function insertRow(table, schema) {
-
-  if (!state[table]) {
-    state[table] = [];
-  }
-
-  const inputs = document.querySelectorAll(`#${table}_form input`);
-
-  /* validate all fields first (no alerts — alertIfInvalid is only wired to oninput) */
-  let valid = true;
-  inputs.forEach(inp => {
-    const fn = inp.dataset.field ? validateValidityField : validateField;
-    if (!fn(inp)) valid = false;
-  });
-  if (!valid) return;
-
-  const row = [];
-
-  for (let i = 0; i < inputs.length; i++) {
-    const v = inputs[i].value.trim();
-    row.push(v === "" ? null : v);
-    inputs[i].value = "";
-    inputs[i].style.borderColor = "";
-    inputs[i].classList.remove("invalid");
-    inputs[i].nextElementSibling.textContent = "";
-    inputs[i].nextElementSibling.style.color = "";
-  }
-
-  if (row.every(v => v === null)) return;
-
-  state[table].push(row);
-  renderTable(table, schema);
-}
-
-
-/* ---------- RENDER TABLE ---------- */
-function renderTable(table, schema) {
-
-  const body = document.getElementById(table + "_body");
-  body.innerHTML = "";
-
-  state[table].forEach((r, i) => {
-
-    let tr = "<tr>";
-
-    r.forEach(v => {
-      tr += `<td>${v ?? ""}</td>`;
-    });
-
-    tr += `<td class="delete" onclick="deleteRow('${table}',${i})">X</td></tr>`;
-
-    body.innerHTML += tr;
-  });
-}
-
-
-/* ---------- DELETE ROW ---------- */
-function deleteRow(table, i) {
-
-  if (!state[table]) return;
-
-  state[table].splice(i, 1);
-  renderTable(table, window[table + "_SCHEMA"]);
-}
-
-
-/* ---------- XML TAG HELPER ---------- */
-function xmlTag(name) {
-  return name.replace(/ /g, "_");
-}
-
-
-/* ---------- CONVERT TO XML ---------- */
-function rowsToXML(table, schema) {
-
-  let xml = `<${table}>\n`;
-
-  state[table].forEach(r => {
-
-    let line = "<row>";
-
-    schema.forEach((f, i) => {
-      const tag = xmlTag(f.name);
-      const v = r[i];
-
-      line += v === null
-        ? `<${tag}/>`
-        : `<${tag}>${v}</${tag}>`;
-    });
-
-    xml += line + "</row>\n";
-  });
-
-  xml += `</${table}>`;
-
-  return xml;
-}
-
-
-/* ---------- PARSE XML INTO TABLE ---------- */
-function parseXML(xmlStr, table, schema) {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(xmlStr, "application/xml");
-  const rows = doc.getElementsByTagName("row");
-
-  if (!state[table]) state[table] = [];
-
-  for (let r = 0; r < rows.length; r++) {
-    const row = [];
-    schema.forEach(f => {
-      const el = rows[r].getElementsByTagName(xmlTag(f.name))[0];
-      const v = el && el.textContent.trim();
-      row.push(v ? v : null);
-    });
-    state[table].push(row);
-  }
-
-  renderTable(table, schema);
-}
-
-
-/* ---------- LOAD XML (SPIFFS on ESP / same dir on PC) ---------- */
-function loadTable(table, schema) {
-  const url = (location.hostname !== "") ? "/" + table + ".xml"
-                                         : table + ".xml";
-  fetch(url)
-    .then(r => { if (r.ok) return r.text(); throw ""; })
-    .then(xml => parseXML(xml, table, schema))
-    .catch(() => {});
-}
-
-
-/* ---------- TOGGLE SECTION ---------- */
-function toggleSection(table, btn) {
-  const section = document.getElementById(table + "_section");
-  const half    = btn.closest(".half");
-  const hidden  = section.style.display === "none";
-  section.style.display = hidden ? "" : "none";
-  btn.innerHTML = hidden ? "&#9650;" : "&#9660;";
-  half.classList.toggle("collapsed", !hidden);
-}
-
-
-/* ---------- WAIT FOR REBOOT ---------- */
-async function waitForReboot(btn) {
-  /* Give the ESP time to actually go down before polling */
-  btn.textContent = "Rebooting...";
-  await new Promise(r => setTimeout(r, 3000));
-
-  const deadline = Date.now() + 30000;
-  while (Date.now() < deadline) {
-    btn.textContent = "Waiting...";
-    try {
-      const r = await fetch("/test", { cache: "no-store" });
-      if (r.ok) { location.reload(); return; }
-    } catch (e) { /* ESP still offline — keep polling */ }
-    await new Promise(r => setTimeout(r, 1500));
-  }
-
-  btn.disabled = false;
-  btn.textContent = "Submit";
-  alert("Reboot timed out — please refresh the page manually.");
-}
-
-
-/* ---------- SUBMIT ---------- */
-async function submitAll() {
-
-  const isESP = location.hostname !== "";
-
-  if (isESP) {
-    const btn = document.getElementById("submit-btn");
-    btn.disabled = true;
-    btn.textContent = "Saving...";
-
-    try {
-      /* POST each XML sequentially — wait for each to succeed */
-      for (const t of TABLE_LIST) {
-        const xml = rowsToXML(t, window[t + "_SCHEMA"]);
-        const r = await fetch("/" + t + ".xml", {
-          method: "POST",
-          headers: { "Content-Type": "application/xml" },
-          body: xml
-        });
-        if (!r.ok) throw new Error(t + " save failed (" + r.status + ")");
-      }
-
-      /* All saved — trigger reboot then wait for ESP to come back */
-      await fetch("/reboot", { method: "POST" }).catch(() => {});
-      await waitForReboot(btn);
-
-    } catch(e) {
-      btn.disabled = false;
-      btn.textContent = "Submit";
-      alert("Error: " + e.message);
-    }
-
-  } else {
-    /* PC: download each non-empty table as an XML file */
-    TABLE_LIST.filter(t => state[t].length > 0).forEach((t, idx) => {
-      const xml = rowsToXML(t, window[t + "_SCHEMA"]);
-      setTimeout(() => {
-        const blob = new Blob([xml], { type: "application/xml" });
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = t + ".xml";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-      }, idx * 200);
-    });
-  }
-}
 
 
 </script>
 
 </body>
 </html>
-

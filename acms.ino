@@ -1,4 +1,4 @@
-#include <WiFi.h>
+#include "network_manager.h"
 #include "acms_web.h"
 
 /* ── WiFi credentials ── */
@@ -11,26 +11,18 @@
 
 void setup()
 {
-  Serial.begin(115200);
-  delay(1000);
+    Serial.begin(115200);
+    delay(1000);
 
-  /* ---------------- WiFi ---------------- */
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  Serial.print("Connecting to WiFi");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    yield();
-    Serial.print(".");
-  }
-  Serial.println("\nWiFi connected");
-  Serial.print("IP: ");
-  Serial.println(WiFi.localIP());
+    /* ---------------- WiFi + DNS/mDNS ---------------- */
+    wifi_manager_init(WIFI_SSID, WIFI_PASSWORD);
 
-  /* ---------------- System init ---------------- */
-  acms_system_init(WEB_USER, WEB_PASSWORD);
+    /* ---------------- System init ---------------- */
+    acms_system_init(WEB_USER, WEB_PASSWORD);
 }
 
 void loop()
 {
-  acms_system_loop();
+    wifi_manager_loop();
+    acms_system_loop();
 }
