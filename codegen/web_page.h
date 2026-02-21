@@ -537,9 +537,9 @@ function renderTable(table, schema) {
 }
 
 
-/* ---------- LOGIN STATE DUMP ---------- */
+/* ---------- STATE DUMP (printed on every page load / reload) ---------- */
 function logStateTables() {
-  console.group("[ACMS] State on login");
+  console.group("[ACMS] State on page load");
   TABLE_LIST.forEach(t => {
     const schema = window[t + "_SCHEMA"];
     console.group(t + " (" + state[t].length + " rows)");
@@ -556,6 +556,11 @@ function logStateTables() {
   console.log("[ACMS] Variable dict:", JSON.stringify(buildVariableDict(), null, 2));
   console.groupEnd();
 }
+
+/* Fire logStateTables() again when the page is restored from the back/forward cache. */
+window.addEventListener("pageshow", function(event) {
+  if (event.persisted) logStateTables();
+});
 
 
 /* ---------- DELETE ROW ---------- */
