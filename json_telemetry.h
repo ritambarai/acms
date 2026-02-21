@@ -5,21 +5,14 @@
 #include <stdbool.h>
 
 #ifdef __cplusplus
-#include <PubSubClient.h>
-extern PubSubClient mqtt;
-#endif
-
-#ifdef __cplusplus
 extern "C" {
 #endif
 
 #define MAX_REMOTE_VARS 64
-#define MAX_MQTT_SIZE 12288
 
 /* --------------------------------------------------------
  * JSON BUILDING (USED BY DATA MANAGER SYNC)
  * -------------------------------------------------------- */
-void mqtt_connect(void);
 
 /* Add a variable (by var_idx) to JSON */
 void json_add_var(uint16_t var_idx);

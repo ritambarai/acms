@@ -16,6 +16,41 @@
                 </xs:sequence></xs:complexType>
               </xs:element>
 
+              <!-- ── wifi ── -->
+              <xs:element name="wifi">
+                <xs:complexType><xs:sequence>
+                  <xs:element name="SSID"     type="xs:string"/>
+                  <xs:element name="Password" type="xs:string"/>
+                </xs:sequence></xs:complexType>
+              </xs:element>
+
+              <!-- ── mqtt ── -->
+              <xs:element name="mqtt">
+                <xs:complexType><xs:sequence>
+                  <xs:element name="Host"        type="xs:string"/>
+                  <xs:element name="Port"        type="xs:integer"/>
+                  <xs:element name="Data_Topic"  type="xs:string"/>
+                  <xs:element name="Alert_Topic" type="xs:string"/>
+                </xs:sequence></xs:complexType>
+              </xs:element>
+
+              <!-- ── schema ── -->
+              <xs:element name="schema">
+                <xs:complexType><xs:sequence>
+                  <xs:element name="Class_Pool_Size" type="xs:integer"/>
+                  <xs:element name="Var_Pool_Size"   type="xs:integer"/>
+                </xs:sequence></xs:complexType>
+              </xs:element>
+
+              <!-- ── json ── -->
+              <xs:element name="json">
+                <xs:complexType><xs:sequence>
+                  <xs:element name="Metadata"    type="xs:boolean"/>
+                  <xs:element name="Constraints" type="xs:boolean"/>
+                  <xs:element name="Modbus"      type="xs:boolean"/>
+                </xs:sequence></xs:complexType>
+              </xs:element>
+
             </xs:sequence>
           </xs:complexType>
         </xs:element>
@@ -35,8 +70,8 @@
               <xs:element name="description">
                 <xs:complexType><xs:sequence>
                   <xs:element name="Class" type="xs:string"/>
-                  <xs:element name="Name" type="xs:string"/>
-                  <xs:element name="Type" type="xs:string"/>
+                  <xs:element name="Name"  type="xs:string"/>
+                  <xs:element name="Type"  type="xs:string"/>
                   <xs:element name="Value" type="xs:float"/>
                 </xs:sequence></xs:complexType>
               </xs:element>
@@ -45,19 +80,19 @@
               <xs:element name="constraints">
                 <xs:complexType><xs:sequence>
                   <xs:element name="Operation_ID" type="xs:float"/>
-                  <xs:element name="Threshold" type="xs:float"/>
-                  <xs:element name="Fault_Code" type="xs:float"/>
-                  <xs:element name="Increment" type="xs:float"/>
+                  <xs:element name="Threshold"    type="xs:float"/>
+                  <xs:element name="Fault_Code"   type="xs:float"/>
+                  <xs:element name="Increment"    type="xs:float"/>
                 </xs:sequence></xs:complexType>
               </xs:element>
 
               <!-- ── modbus ── -->
               <xs:element name="modbus">
                 <xs:complexType><xs:sequence>
-                  <xs:element name="Slave_ID" type="xs:float"/>
-                  <xs:element name="Function_ID" type="xs:float"/>
+                  <xs:element name="Slave_ID"      type="xs:float"/>
+                  <xs:element name="Function_ID"   type="xs:float"/>
                   <xs:element name="Start_Address" type="xs:float"/>
-                  <xs:element name="Data_Length" type="xs:float"/>
+                  <xs:element name="Data_Length"   type="xs:float"/>
                 </xs:sequence></xs:complexType>
               </xs:element>
 
@@ -75,9 +110,9 @@
         <xs:element name="row" maxOccurs="unbounded">
           <xs:complexType>
             <xs:sequence>
-              <xs:element name="Key" type="xs:float" minOccurs="1" maxOccurs="1"/>
+              <xs:element name="Key"     type="xs:float"  minOccurs="1" maxOccurs="1"/>
               <xs:element name="Message" type="xs:string" minOccurs="1" maxOccurs="1"/>
-              <xs:element name="Class" type="xs:string" minOccurs="1" maxOccurs="1"/>
+              <xs:element name="Class"   type="xs:string" minOccurs="1" maxOccurs="1"/>
             </xs:sequence>
           </xs:complexType>
         </xs:element>
@@ -103,8 +138,8 @@
               <!-- ── verification ── -->
               <xs:element name="verification">
                 <xs:complexType><xs:sequence>
-                  <xs:element name="Value" type="xs:string"/>
-                  <xs:element name="Fault_Code" type="xs:string"/>
+                  <xs:element name="Value"        type="xs:string"/>
+                  <xs:element name="Fault_Code"   type="xs:string"/>
                   <xs:element name="Operation_ID" type="xs:string"/>
                 </xs:sequence></xs:complexType>
               </xs:element>

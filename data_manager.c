@@ -1,6 +1,7 @@
 #include "data_manager.h"
 #include "hashmap.h"
 #include "json_telemetry.h"
+#include "schema.h"   /* effective_class_pool_size / effective_var_pool_size */
 #include <stdio.h>
 
 /* ============================================================
@@ -11,11 +12,15 @@ class_t *head = DM_PTR_NULL;
 class_t *tail = DM_PTR_NULL;
 bool     dirty = false;
 
-class_t  class_pool[MAX_CLASS];
-bool     used_class[MAX_CLASS];
+class_t  class_pool[MAX_CLASS_CAP];
+bool     used_class[MAX_CLASS_CAP];
 
-var_t    var_pool[MAX_VAR];
-bool     used_var[MAX_VAR];
+var_t    var_pool[MAX_VAR_CAP];
+bool     used_var[MAX_VAR_CAP];
+
+/* Runtime pool-size accessors — declared in hashmap.h, defined here */
+int32_t dm_max_class(void) { return effective_class_pool_size(); }
+int32_t dm_max_var(void)   { return 2 * effective_var_pool_size(); }
 
 uint16_t last_class_idx = 0;
 uint16_t last_var_idx   = 0;
@@ -264,10 +269,11 @@ bool update_variable(void *ext_addr)
 
 
 bool dm_set_value(const char *class_name,
-	          const char *type,
+                  const char *type,
                   const char *var_name,
                   void       *ext_addr,
-                  float       value)
+                  float       value,
+                  uint16_t    constraint_idx)
 {
     map_create_flags_t flags = MAPF_NONE;
 
@@ -334,11 +340,12 @@ bool dm_set_value(const char *class_name,
         var_idx = last_var_idx++;
 
         var_pool[var_idx] = VAR_INIT(var_idx);
-        var_pool[var_idx].var_name    = var_name;
-        var_pool[var_idx].class_idx   = class_idx;
-        var_pool[var_idx].ext_addr    = ext_addr;
-        var_pool[var_idx].var_type    = type;
-        var_pool[var_idx].cached_val  = value;
+        var_pool[var_idx].var_name       = var_name;
+        var_pool[var_idx].class_idx      = class_idx;
+        var_pool[var_idx].constraint_idx = constraint_idx;
+        var_pool[var_idx].ext_addr       = ext_addr;
+        var_pool[var_idx].var_type       = type;
+        var_pool[var_idx].cached_val     = value;
         
 
         //used_var[var_idx] = true;
