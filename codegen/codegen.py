@@ -309,6 +309,38 @@ def gen_validity_js():
         "  return dict;\n"
         "}\n"
         "\n"
+        "/* Build nested Variable dict: { Class: { Name: { TypeVal: { field: value, ... } } } } */\n"
+        "function buildVariableDict() {\n"
+        "  var dict = {};\n"
+        '  if (!state["Variables"]) return dict;\n'
+        '  var schema = (typeof Variables_SCHEMA !== "undefined") ? Variables_SCHEMA : [];\n'
+        "  var classIdx = -1, nameIdx = -1, typeIdx = -1;\n"
+        "  for (var i = 0; i < schema.length; i++) {\n"
+        '    if (schema[i].name === "Class") classIdx = i;\n'
+        '    else if (schema[i].name === "Name") nameIdx = i;\n'
+        '    else if (schema[i].name === "Type") typeIdx = i;\n'
+        "  }\n"
+        "  if (classIdx < 0 || nameIdx < 0 || typeIdx < 0) return dict;\n"
+        '  state["Variables"].forEach(function(row) {\n'
+        "    var cls = row[classIdx];\n"
+        "    var name = row[nameIdx];\n"
+        "    var type = row[typeIdx];\n"
+        "    if (cls === null || cls === undefined) return;\n"
+        "    if (!dict[cls]) dict[cls] = {};\n"
+        "    if (name === null || name === undefined) return;\n"
+        "    if (!dict[cls][name]) dict[cls][name] = {};\n"
+        "    if (type === null || type === undefined) return;\n"
+        "    var info = {};\n"
+        "    for (var i = 0; i < schema.length; i++) {\n"
+        "      if (i !== classIdx && i !== nameIdx && i !== typeIdx) {\n"
+        "        info[schema[i].name] = row[i];\n"
+        "      }\n"
+        "    }\n"
+        "    dict[cls][name][type] = info;\n"
+        "  });\n"
+        "  return dict;\n"
+        "}\n"
+        "\n"
         "/* Show alert once per error reason — only called from onblur, never from insertRow */\n"
         "function alertIfInvalid(input) {\n"
         "  var errSpan = input.nextElementSibling;\n"
@@ -352,14 +384,14 @@ def gen_validity_js():
         "\n"
         "  var dict = buildMetadataDict();\n"
         "\n"
-        "  /* ── Name field: stepped check — type row → bool shortcut → unit row ── */\n"
+        "  /* ── Name field: stepped check using nested Variable dict ── */\n"
         '  if (fieldName === "Name") {\n'
         '    var form = input.closest(\'[id$="_form"]\');\n'
         '    var typeInput = form ? form.querySelector(\'[data-name="Type"]\') : null;\n'
         '    var typeVal = typeInput ? typeInput.value.trim().toLowerCase() : "";\n'
         '    var half = input.closest(".half");\n'
         '    var insertBtn = half ? half.querySelector(".insert-btn") : null;\n'
-        '    if (typeVal === "type" || typeVal === "units" || typeVal === "validity") {\n'
+        '    if (typeVal === "type" || typeVal === "units" || typeVal === "verification") {\n'
         '      input.style.borderColor = "";\n'
         '      input.classList.remove("invalid");\n'
         '      errSpan.textContent = "";\n'
@@ -369,21 +401,13 @@ def gen_validity_js():
         "    }\n"
         '    var classInput = form ? form.querySelector(\'[data-name="Class"]\') : null;\n'
         '    var classVal = classInput ? classInput.value.trim() : "";\n'
-        '    var varSchema = (typeof Variables_SCHEMA !== "undefined") ? Variables_SCHEMA : [];\n'
-        "    var classIdx = -1, typeIdx = -1, valueIdx = -1, nameIdx = -1;\n"
-        "    for (var i = 0; i < varSchema.length; i++) {\n"
-        '      if (varSchema[i].name === "Class") classIdx = i;\n'
-        '      if (varSchema[i].name === "Type")  typeIdx  = i;\n'
-        '      if (varSchema[i].name === "Value") valueIdx = i;\n'
-        '      if (varSchema[i].name === "Name")  nameIdx  = i;\n'
-        "    }\n"
-        '    var varRows = (state && state["Variables"]) ? state["Variables"] : [];\n'
-        "    /* gate on class existence first so type/unit alerts can fire */\n"
-        "    var classRows = varRows.filter(function(row) {\n"
-        "      return classIdx >= 0 && row[classIdx] && classVal &&\n"
-        "             row[classIdx].toLowerCase() === classVal.toLowerCase();\n"
+        "    var varDict = buildVariableDict();\n"
+        "\n"
+        "    /* ── Step 0: check class exists in Variables ── */\n"
+        "    var classKey = Object.keys(varDict).find(function(k) {\n"
+        "      return k.toLowerCase() === classVal.toLowerCase();\n"
         "    });\n"
-        "    if (classRows.length === 0) {\n"
+        "    if (!classKey) {\n"
         '      input.style.borderColor = "red";\n'
         '      input.classList.add("invalid");\n'
         '      errSpan.textContent = "NO MATCH";\n'
@@ -393,15 +417,27 @@ def gen_validity_js():
         "      return false;\n"
         "    }\n"
         "\n"
-        "    /* ── Step 1: type row must exist ── */\n"
-        "    var typeRow = null;\n"
-        "    for (var j = 0; j < classRows.length; j++) {\n"
-        "      if (typeIdx >= 0 && classRows[j][typeIdx] &&\n"
-        '          classRows[j][typeIdx].toLowerCase() === "type") {\n'
-        "        typeRow = classRows[j]; break;\n"
-        "      }\n"
+        "    /* ── Step 1: check name exists in class ── */\n"
+        "    var nameKey = Object.keys(varDict[classKey]).find(function(k) {\n"
+        "      return k.toLowerCase() === v.toLowerCase();\n"
+        "    });\n"
+        "    if (!nameKey) {\n"
+        '      input.style.borderColor = "red";\n'
+        '      input.classList.add("invalid");\n'
+        '      errSpan.textContent = "NO MATCH";\n'
+        '      errSpan.style.color = "red";\n'
+        "      if (insertBtn) insertBtn.disabled = true;\n"
+        '      input.dataset.lastAlert = "";\n'
+        "      return false;\n"
         "    }\n"
-        "    if (!typeRow) {\n"
+        "\n"
+        "    var nameDict = varDict[classKey][nameKey];\n"
+        "\n"
+        "    /* ── Step 2: type row must exist ── */\n"
+        "    var typeRowKey = Object.keys(nameDict).find(function(k) {\n"
+        '      return k.toLowerCase() === "type";\n'
+        "    });\n"
+        "    if (!typeRowKey) {\n"
         '      input.style.borderColor = "red";\n'
         '      input.classList.add("invalid");\n'
         '      errSpan.textContent = "NO TYPE";\n'
@@ -410,48 +446,33 @@ def gen_validity_js():
         "      return false;\n"
         "    }\n"
         "\n"
-        "    /* ── Step 2: resolve type label from Metadata ── */\n"
+        "    /* ── Step 3: resolve type label from Metadata ── */\n"
+        '    var tKeyVal = (nameDict[typeRowKey]["Value"] !== null && nameDict[typeRowKey]["Value"] !== undefined)\n'
+        '      ? String(nameDict[typeRowKey]["Value"]) : "";\n'
+        "    /* normalize float key: \"1.0\" → \"1\" so it matches Metadata Key column */\n"
+        "    var tKeyNorm = (tKeyVal !== \"\" && isFinite(tKeyVal)) ? String(parseFloat(tKeyVal)) : tKeyVal;\n"
         "    var tClassKey = Object.keys(dict).find(function(k) {\n"
         '      return k.toLowerCase() === "type";\n'
         '    }) || "type";\n'
-        "    var tKeyVal = (typeRow[valueIdx] !== null && typeRow[valueIdx] !== undefined)\n"
-        '      ? String(typeRow[valueIdx]) : "";\n'
-        "    var typeLabel = (dict[tClassKey] && dict[tClassKey].hasOwnProperty(tKeyVal))\n"
-        "      ? dict[tClassKey][tKeyVal].toLowerCase() : \"\";\n"
+        "    var typeLabel = (dict[tClassKey] && dict[tClassKey].hasOwnProperty(tKeyNorm))\n"
+        "      ? dict[tClassKey][tKeyNorm].toLowerCase() : \"\";\n"
         '    input.style.borderColor = "green";\n'
         '    input.classList.remove("invalid");\n'
         "    errSpan.textContent = typeLabel.toUpperCase();\n"
         '    errSpan.style.color = "green";\n'
         '    input.dataset.lastAlert = "";\n'
         "\n"
-        '    /* ── Step 3: bool/choice → skip unit check, still validate name ── */\n'
+        "    /* ── Step 4: bool/choice → name already validated in Step 1 ── */\n"
         '    if (typeLabel === "bool" || typeLabel === "choice") {\n'
-        "      var boolNameMatch = classRows.some(function(row) {\n"
-        "        return nameIdx >= 0 && row[nameIdx] && v &&\n"
-        "               row[nameIdx].toLowerCase() === v.toLowerCase();\n"
-        "      });\n"
-        "      if (!boolNameMatch) {\n"
-        '        input.style.borderColor = "red";\n'
-        '        input.classList.add("invalid");\n'
-        '        errSpan.textContent = "NO MATCH";\n'
-        '        errSpan.style.color = "red";\n'
-        "        if (insertBtn) insertBtn.disabled = true;\n"
-        '        input.dataset.lastAlert = "";\n'
-        "        return false;\n"
-        "      }\n"
         "      if (insertBtn) insertBtn.disabled = false;\n"
         "      return true;\n"
         "    }\n"
         "\n"
-        "    /* ── Step 4: non-bool → unit row must exist ── */\n"
-        "    var unitRow = null;\n"
-        "    for (var k = 0; k < classRows.length; k++) {\n"
-        "      if (typeIdx >= 0 && classRows[k][typeIdx] &&\n"
-        '          classRows[k][typeIdx].toLowerCase() === "unit") {\n'
-        "        unitRow = classRows[k]; break;\n"
-        "      }\n"
-        "    }\n"
-        "    if (!unitRow) {\n"
+        "    /* ── Step 5: non-bool → unit row must exist ── */\n"
+        "    var unitRowKey = Object.keys(nameDict).find(function(k) {\n"
+        '      return k.toLowerCase() === "unit";\n'
+        "    });\n"
+        "    if (!unitRowKey) {\n"
         '      input.style.borderColor = "red";\n'
         '      input.classList.add("invalid");\n'
         '      errSpan.textContent = "NO UNIT";\n'
@@ -460,29 +481,17 @@ def gen_validity_js():
         "      return false;\n"
         "    }\n"
         "\n"
-        "    /* ── Step 5: resolve unit message from Metadata (use classVal class only) ── */\n"
-        "    var uKeyVal = (unitRow[valueIdx] !== null && unitRow[valueIdx] !== undefined)\n"
-        '      ? String(unitRow[valueIdx]) : "";\n'
+        "    /* ── Step 6: resolve unit message from Metadata (use classKey class only) ── */\n"
+        '    var uKeyVal = (nameDict[unitRowKey]["Value"] !== null && nameDict[unitRowKey]["Value"] !== undefined)\n'
+        '      ? String(nameDict[unitRowKey]["Value"]) : "";\n'
+        "    /* normalize float key: \"1.0\" → \"1\" so it matches Metadata Key column */\n"
+        "    var uKeyNorm = (uKeyVal !== \"\" && isFinite(uKeyVal)) ? String(parseFloat(uKeyVal)) : uKeyVal;\n"
         "    var uClassKey = Object.keys(dict).find(function(k) {\n"
-        "      return k.toLowerCase() === classVal.toLowerCase();\n"
+        "      return k.toLowerCase() === classKey.toLowerCase();\n"
         "    });\n"
-        "    var uMsg = (uClassKey && dict[uClassKey].hasOwnProperty(uKeyVal))\n"
-        "      ? dict[uClassKey][uKeyVal] : null;\n"
+        "    var uMsg = (uClassKey && dict[uClassKey].hasOwnProperty(uKeyNorm))\n"
+        "      ? dict[uClassKey][uKeyNorm] : null;\n"
         "    if (uMsg !== null) {\n"
-        "      /* ── Step 5b: name must also exist in this class ── */\n"
-        "      var nameMatch = classRows.some(function(row) {\n"
-        "        return nameIdx >= 0 && row[nameIdx] && v &&\n"
-        "               row[nameIdx].toLowerCase() === v.toLowerCase();\n"
-        "      });\n"
-        "      if (!nameMatch) {\n"
-        '        input.style.borderColor = "red";\n'
-        '        input.classList.add("invalid");\n'
-        '        errSpan.textContent = "NO MATCH";\n'
-        '        errSpan.style.color = "red";\n'
-        "        if (insertBtn) insertBtn.disabled = true;\n"
-        '        input.dataset.lastAlert = "";\n'
-        "        return false;\n"
-        "      }\n"
         '      input.style.borderColor = "green";\n'
         '      input.classList.remove("invalid");\n'
         "      errSpan.textContent = uMsg.toUpperCase();\n"
@@ -562,7 +571,7 @@ def c_ident(name):
     return name.replace(" ", "_").replace("-", "_")
 
 
-def _gen_subcat_block(lines, t, subcat_name, subcat_fields, field_map, is_modbus=False):
+def _gen_subcat_block(lines, t, subcat_name, subcat_fields, field_map, has_value_ptr=False):
     """Generate enum, struct, table for one subcategory of a table."""
     tl = t.lower()
     tu = t.upper()
@@ -606,8 +615,8 @@ def _gen_subcat_block(lines, t, subcat_name, subcat_fields, field_map, is_modbus
         c_type = C_TYPE_MAP.get(typ, "char*")
         ci = c_ident(name)
         lines.append(f"  {c_type} {ci};")
-    if is_modbus:
-        lines.append(f"  float *value_ptr;   /* points to values struct Value field */")
+    if has_value_ptr:
+        lines.append(f"  float *value_ptr;   /* points to description struct Value field */")
     lines.append(f"}} {prefix}_row_t;")
     lines.append("")
 
@@ -691,10 +700,10 @@ def gen_c_schema_h(tables, subcategories=None):
 
             for sc_name in subcat_names:
                 sc_fields = subcats[sc_name]
-                is_modbus = (sc_name.lower() == "modbus")
+                has_value_ptr = sc_name.lower() in ("modbus", "constraints")
                 lines.append(f"/* ─── {t} / {sc_name} ─── */")
                 lines.append("")
-                _gen_subcat_block(lines, t, sc_name, sc_fields, field_map, is_modbus)
+                _gen_subcat_block(lines, t, sc_name, sc_fields, field_map, has_value_ptr)
         else:
             # No subcategories — flat struct (original behaviour)
             n_cols = len(fields)
@@ -908,15 +917,16 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                     _gen_field_extract(lines, fn, typ, prefix, PREFIX, tbl_var)
 
             # Link modbus value_ptr to values struct's Value field
-            has_modbus = "modbus" in [s.lower() for s in subcat_names]
-            has_values = "values" in [s.lower() for s in subcat_names]
-            if has_modbus and has_values:
-                # Check if Value field exists in values subcat
-                values_sc = [s for s in subcat_names if s.lower() == "values"][0]
-                if "Value" in subcats[values_sc]:
-                    lines.append(f"    /* link modbus value_ptr → values.Value */")
-                    lines.append(f"    modbus_tbl->rows[count].value_ptr = &values_tbl->rows[count].Value;")
-                    lines.append("")
+            # Find the source subcat that owns the "Value" field (e.g. description)
+            src_sc = next((s for s in subcat_names if "Value" in subcats[s]), None)
+            if src_sc:
+                src_sl = src_sc.lower()
+                for sc in subcat_names:
+                    if sc.lower() in ("modbus", "constraints"):
+                        sl = sc.lower()
+                        lines.append(f"    /* link {sl} value_ptr → {src_sl}.Value */")
+                        lines.append(f"    {sl}_tbl->rows[count].value_ptr = &{src_sl}_tbl->rows[count].Value;")
+                lines.append("")
 
             lines.append("    count++;")
             lines.append("    pos = row_end + 6;")
@@ -1101,33 +1111,534 @@ def gen_xml_defaults_h(xml_map):
 
 
 # ═══════════════════════════════════════════════════════
+#  SETTINGS BAR GENERATOR
+# ═══════════════════════════════════════════════════════
+
+def gen_headers_block(headers_fields, field_map):
+    """Generate the checkbox/input controls that live inside #submit-area (below Submit).
+
+    Boolean fields become a checkbox+label row.  All other types get a compact input.
+    The 'headers' subcategory label is intentionally omitted.
+    """
+    html = ""
+    for fn in headers_fields:
+        typ = field_map.get(fn, "string")
+        label_text = fn.replace("_", " ")
+        if typ == "boolean":
+            html += f'<label class="check-label">\n'
+            html += f'  <input type="checkbox" data-name="{fn}" data-type="{typ}">\n'
+            html += f'  {label_text}\n'
+            html += f'</label>\n'
+        else:
+            html += f'<div class="settings-field">\n'
+            html += (f'  <input placeholder="{typ}" data-type="{typ}"'
+                     f' data-name="{fn}" oninput="validateField(this)">\n')
+            html += f'  <span class="error-msg"></span>\n'
+            html += f'</div>\n'
+    return html
+
+
+def gen_settings_block(name, subcats, fields):
+    """Generate the Settings bar: heading + collapse button + collapsible for future subcats.
+
+    The 'headers' subcategory is excluded here — it is rendered inside #submit-area
+    via gen_headers_block() so the controls appear directly below the Submit button.
+    """
+    field_map = {n: typ for n, typ in fields}
+
+    html  = f'<div class="settings-bar">\n'
+    html += f'  <h3 class="category-header settings-category">\n'
+    html += f'    {name}\n'
+    html += f'    <button class="toggle-btn" '
+    html += f'onclick="toggleSettingsSection(\'{name}\', this)">&#9660;</button>\n'
+    html += f'  </h3>\n'
+
+    # ── subcategories other than 'headers': collapsible (hidden by default) ──
+    other_subcats = {k: v for k, v in subcats.items() if k != "headers"}
+    html += f'  <div id="{name}_collapsible" style="display:none">\n'
+    for sc_name, sc_fields in other_subcats.items():
+        html += f'    <div class="subcat-row settings-compact">\n'
+        html += f'      <span class="subcat-label">{sc_name}</span>\n'
+        html += f'      <div class="settings-form-grid">\n'
+        for fn in sc_fields:
+            typ = field_map[fn]
+            label = fn.replace("_", " ")
+            html += f'        <div class="settings-field">\n'
+            html += f'          <label>{label}</label>\n'
+            html += (f'          <input placeholder="{typ}" data-type="{typ}"'
+                     f' data-name="{fn}" oninput="validateField(this)">\n')
+            html += f'          <span class="error-msg"></span>\n'
+            html += f'        </div>\n'
+        html += f'      </div>\n'
+        html += f'    </div>\n'
+    html += f'  </div>\n'
+
+    html += f'</div>\n'
+    return html
+
+
+# ═══════════════════════════════════════════════════════
+#  STABLE JS GENERATOR
+# ═══════════════════════════════════════════════════════
+
+def gen_stable_js():
+    """Generate all stable JS logic (previously hardcoded in template.html).
+
+    Dynamic parts:
+      - submitAll() reads Download_a_copy from the Settings_form input.
+      - toggleSettingsSection() collapses all Settings subcats except headers.
+    """
+    return """\
+/* ======== STABLE JS LOGIC ======== */
+
+let state = {};
+
+/* ---------- INITIALIZATION ---------- */
+window.addEventListener("DOMContentLoaded", () => {
+
+  /* Compute MAX_COLUMNS safely (cap at 6 per row) */
+  const schemas = TABLE_LIST.map(t => window[t + "_SCHEMA"]);
+  const MAX_COLUMNS = Math.min(6, Math.max(...schemas.map(s => s.length)));
+
+  const MIN_GAP = 14;
+
+  /* Compute fixed field width */
+  const FIELD_WIDTH = `calc((100% - ${(MAX_COLUMNS - 1) * MIN_GAP}px) / ${MAX_COLUMNS})`;
+
+  document.documentElement.style.setProperty("--field-width", FIELD_WIDTH);
+
+  /* Initialize each table; call logStateTables() once all are loaded */
+  let _tablesLoaded = 0;
+  function _onTableLoaded() {
+    if (++_tablesLoaded === TABLE_LIST.length) logStateTables();
+  }
+
+  TABLE_LIST.forEach(table => {
+
+    const schema = window[table + "_SCHEMA"];
+    state[table] = [];
+
+    buildForm(table);
+
+    /* load from embedded XML (PC) or fetch from SPIFFS (ESP) */
+    if (PRELOAD_XML[table]) {
+      parseXML(PRELOAD_XML[table], table, schema);
+      _onTableLoaded();
+    } else {
+      loadTable(table, schema, _onTableLoaded);
+    }
+  });
+
+});
+
+
+/* ---------- BUILD FORM ---------- */
+function buildForm(table) {
+  // Flex layout already handles spacing.
+}
+
+
+/* ---------- INSERT ROW ---------- */
+function insertRow(table, schema) {
+
+  if (!state[table]) state[table] = [];
+
+  const inputs = document.querySelectorAll(`#${table}_form input`);
+
+  /* validate all fields (no alerts — alertIfInvalid is only wired to onblur) */
+  let valid = true;
+  inputs.forEach(inp => {
+    const fn = inp.dataset.field ? validateValidityField : validateField;
+    if (!fn(inp)) valid = false;
+  });
+  if (!valid) return;
+
+  const row = [];
+  for (let i = 0; i < inputs.length; i++) {
+    const v = inputs[i].value.trim();
+    row.push(v === "" ? null : v);
+    inputs[i].value = "";
+    inputs[i].style.borderColor = "";
+    inputs[i].classList.remove("invalid");
+    inputs[i].nextElementSibling.textContent = "";
+    inputs[i].nextElementSibling.style.color = "";
+  }
+
+  if (row.every(v => v === null)) return;
+
+  state[table].push(row);
+  renderTable(table, schema);
+}
+
+
+/* ---------- RENDER TABLE ---------- */
+function renderTable(table, schema) {
+
+  const body = document.getElementById(table + "_body");
+  body.innerHTML = "";
+
+  state[table].forEach((r, i) => {
+    let tr = "<tr>";
+    r.forEach(v => { tr += `<td>${v ?? ""}</td>`; });
+    tr += `<td class="delete" onclick="deleteRow('${table}',${i})">X</td></tr>`;
+    body.innerHTML += tr;
+  });
+
+  console.log("[ACMS] " + table + " state:", JSON.stringify(state[table]));
+  if (table === "Metadata") {
+    console.log("[ACMS] Metadata dict:", JSON.stringify(buildMetadataDict(), null, 2));
+  }
+  if (table === "Variables") {
+    console.log("[ACMS] Variable dict:", JSON.stringify(buildVariableDict(), null, 2));
+  }
+}
+
+
+/* ---------- LOGIN STATE DUMP ---------- */
+function logStateTables() {
+  console.group("[ACMS] State on login");
+  TABLE_LIST.forEach(t => {
+    const schema = window[t + "_SCHEMA"];
+    console.group(t + " (" + state[t].length + " rows)");
+    console.table(
+      state[t].map(row => {
+        const obj = {};
+        schema.forEach((f, i) => { obj[f.name] = row[i]; });
+        return obj;
+      })
+    );
+    console.groupEnd();
+  });
+  console.log("[ACMS] Metadata dict:", JSON.stringify(buildMetadataDict(), null, 2));
+  console.log("[ACMS] Variable dict:", JSON.stringify(buildVariableDict(), null, 2));
+  console.groupEnd();
+}
+
+
+/* ---------- DELETE ROW ---------- */
+function deleteRow(table, i) {
+  if (!state[table]) return;
+  state[table].splice(i, 1);
+  renderTable(table, window[table + "_SCHEMA"]);
+}
+
+
+/* ---------- XML TAG HELPER ---------- */
+function xmlTag(name) {
+  return name.replace(/ /g, "_");
+}
+
+
+/* ---------- CONVERT TO XML ---------- */
+function rowsToXML(table, schema) {
+
+  let xml = `<${table}>\\n`;
+
+  state[table].forEach(r => {
+    let line = "<row>";
+    schema.forEach((f, i) => {
+      const tag = xmlTag(f.name);
+      const v = r[i];
+      line += v === null ? `<${tag}/>` : `<${tag}>${v}</${tag}>`;
+    });
+    xml += line + "</row>\\n";
+  });
+
+  xml += `</${table}>`;
+  return xml;
+}
+
+
+/* ---------- PARSE XML INTO TABLE ---------- */
+function parseXML(xmlStr, table, schema) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xmlStr, "application/xml");
+  const rows = doc.getElementsByTagName("row");
+
+  if (!state[table]) state[table] = [];
+
+  for (let r = 0; r < rows.length; r++) {
+    const row = [];
+    schema.forEach(f => {
+      const el = rows[r].getElementsByTagName(xmlTag(f.name))[0];
+      const v = el && el.textContent.trim();
+      row.push(v ? v : null);
+    });
+    state[table].push(row);
+  }
+
+  renderTable(table, schema);
+}
+
+
+/* ---------- LOAD XML (SPIFFS on ESP / same dir on PC) ---------- */
+function loadTable(table, schema, onDone) {
+  const url = (location.hostname !== "") ? "/" + table + ".xml" : table + ".xml";
+  fetch(url)
+    .then(r => { if (r.ok) return r.text(); throw new Error("HTTP " + r.status); })
+    .then(xml => { parseXML(xml, table, schema); if (onDone) onDone(); })
+    .catch(e => { console.error("[ACMS] Failed to load " + table + ".xml:", e); if (onDone) onDone(); });
+}
+
+
+/* ---------- TOGGLE SECTION (Metadata / Variables) ---------- */
+function toggleSection(table, btn) {
+  const section = document.getElementById(table + "_section");
+  const half    = btn.closest(".half");
+  const hidden  = section.style.display === "none";
+  section.style.display = hidden ? "" : "none";
+  btn.innerHTML = hidden ? "&#9650;" : "&#9660;";
+  half.classList.toggle("collapsed", !hidden);
+}
+
+
+/* ---------- TOGGLE SETTINGS SECTION ---------- */
+/* Collapses all Settings subcategories except headers (always visible). */
+function toggleSettingsSection(name, btn) {
+  var collapsible = document.getElementById(name + "_collapsible");
+  if (!collapsible) return;
+  var hidden = collapsible.style.display === "none";
+  collapsible.style.display = hidden ? "" : "none";
+  btn.innerHTML = hidden ? "&#9650;" : "&#9660;";
+}
+
+
+/* ---------- WAIT FOR REBOOT ---------- */
+async function waitForReboot(btn) {
+  btn.textContent = "Rebooting...";
+  await new Promise(r => setTimeout(r, 3000));
+
+  const deadline = Date.now() + 30000;
+  while (Date.now() < deadline) {
+    btn.textContent = "Waiting...";
+    try {
+      const r = await fetch("/test", { cache: "no-store" });
+      if (r.ok) { location.reload(); return; }
+    } catch (e) { /* ESP still offline */ }
+    await new Promise(r => setTimeout(r, 1500));
+  }
+
+  btn.disabled = false;
+  btn.textContent = "Submit";
+  alert("Reboot timed out — please refresh the page manually.");
+}
+
+
+/* ---------- CREATE ZIP (STORE, no compression, pure JS) ---------- */
+function createZIP(files) {
+
+  function crc32(bytes) {
+    const t = new Uint32Array(256);
+    for (let i = 0; i < 256; i++) {
+      let c = i;
+      for (let j = 0; j < 8; j++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+      t[i] = c;
+    }
+    let crc = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; i++) crc = t[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  const u16 = n => [n & 0xFF, (n >> 8) & 0xFF];
+  const u32 = n => [n & 0xFF, (n >> 8) & 0xFF, (n >> 16) & 0xFF, (n >> 24) & 0xFF];
+  const enc = new TextEncoder();
+  const sb  = s => Array.from(enc.encode(s));
+
+  const locals = [], centrals = [];
+  let offset = 0;
+
+  files.forEach(({name, data}) => {
+    const nb = sb(name), db = Array.from(enc.encode(data));
+    const crc = crc32(db), size = db.length;
+
+    const local = [
+      0x50,0x4B,0x03,0x04,
+      ...u16(20), ...u16(0), ...u16(0),
+      ...u16(0), ...u16(0),
+      ...u32(crc), ...u32(size), ...u32(size),
+      ...u16(nb.length), ...u16(0),
+      ...nb, ...db
+    ];
+    const central = [
+      0x50,0x4B,0x01,0x02,
+      ...u16(20), ...u16(20), ...u16(0), ...u16(0),
+      ...u16(0), ...u16(0),
+      ...u32(crc), ...u32(size), ...u32(size),
+      ...u16(nb.length), ...u16(0), ...u16(0),
+      ...u16(0), ...u16(0), ...u32(0), ...u32(offset),
+      ...nb
+    ];
+
+    locals.push(local);
+    centrals.push(central);
+    offset += local.length;
+  });
+
+  const cdOffset = offset;
+  const cdSize   = centrals.reduce((s, c) => s + c.length, 0);
+  const eocd = [
+    0x50,0x4B,0x05,0x06,
+    ...u16(0), ...u16(0),
+    ...u16(files.length), ...u16(files.length),
+    ...u32(cdSize), ...u32(cdOffset),
+    ...u16(0)
+  ];
+
+  return new Uint8Array([...locals.flat(), ...centrals.flat(), ...eocd]);
+}
+
+
+/* ---------- DOWNLOAD ZIP HELPER ---------- */
+function downloadZIP() {
+  const files = TABLE_LIST.map(t => ({
+    name: t + ".xml",
+    data: rowsToXML(t, window[t + "_SCHEMA"])
+  }));
+  const zip  = createZIP(files);
+  const blob = new Blob([zip], { type: "application/zip" });
+  const a    = document.createElement("a");
+  a.href     = URL.createObjectURL(blob);
+  a.download = "acms_xml.zip";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+
+/* ---------- SUBMIT ---------- */
+async function submitAll() {
+
+  const isESP = location.hostname !== "";
+
+  /* Read Download_a_copy checkbox from submit-area */
+  var dlInput = document.querySelector('#submit-area [data-name="Download_a_copy"]');
+  var dlChecked = dlInput && dlInput.checked;
+
+  if (isESP) {
+    const btn = document.getElementById("submit-btn");
+    btn.disabled = true;
+    btn.textContent = "Saving...";
+
+    try {
+      for (const t of TABLE_LIST) {
+        const xml = rowsToXML(t, window[t + "_SCHEMA"]);
+        const r = await fetch("/" + t + ".xml", {
+          method: "POST",
+          headers: { "Content-Type": "application/xml" },
+          body: xml
+        });
+        if (!r.ok) throw new Error(t + " save failed (" + r.status + ")");
+      }
+
+      if (dlChecked) downloadZIP();
+
+      await fetch("/reboot", { method: "POST" }).catch(() => {});
+      await waitForReboot(btn);
+
+    } catch(e) {
+      btn.disabled = false;
+      btn.textContent = "Submit";
+      alert("Error: " + e.message);
+    }
+
+  } else {
+    /* PC mode */
+    if (dlChecked) {
+      downloadZIP();
+    } else {
+      TABLE_LIST.filter(t => state[t].length > 0).forEach((t, idx) => {
+        const xml = rowsToXML(t, window[t + "_SCHEMA"]);
+        setTimeout(() => {
+          const blob = new Blob([xml], { type: "application/xml" });
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = t + ".xml";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        }, idx * 200);
+      });
+    }
+  }
+}
+"""
+
+
+# ═══════════════════════════════════════════════════════
 #  MAIN
 # ═══════════════════════════════════════════════════════
 
+def import_zip(zip_path):
+    """Extract XMLs from zip_path into codegen working dir, then delete the zip."""
+    import zipfile
+    work_dir = os.path.dirname(os.path.abspath(__file__))
+    zip_path  = os.path.abspath(zip_path)
+
+    if not os.path.isfile(zip_path):
+        print(f"ERROR: ZIP not found: {zip_path}")
+        sys.exit(1)
+
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        extracted = []
+        for member in zf.namelist():
+            # only extract .xml files, strip any directory prefix
+            if member.lower().endswith(".xml"):
+                basename = os.path.basename(member)
+                dest = os.path.join(work_dir, basename)
+                with zf.open(member) as src, open(dest, "wb") as dst:
+                    dst.write(src.read())
+                extracted.append(basename)
+
+    os.remove(zip_path)
+
+    if extracted:
+        print(f"Imported from ZIP: {', '.join(extracted)}")
+        print(f"Deleted: {zip_path}")
+    else:
+        print("WARNING: ZIP contained no .xml files.")
+
+
 def main():
-    if len(sys.argv) != 3:
-        print("Usage: python codegen.py <schema.xsd> <template.html>")
+    if len(sys.argv) not in (3, 4):
+        print("Usage: python codegen.py <schema.xsd> <template.html> [acms_xml.zip]")
         sys.exit(1)
 
     xsd_path = sys.argv[1]
     template_path = sys.argv[2]
+
+    # Optional third arg: path to a ZIP previously downloaded from the browser.
+    # XMLs inside are extracted to the codegen working dir, replacing older files,
+    # and the ZIP is deleted before code generation runs.
+    if len(sys.argv) == 4:
+        import_zip(sys.argv[3])
     tables, subcategories = parse_xsd(xsd_path)
 
-    # First 2 non-Controls categories for form/table + C outputs
-    form_tables = {k: v for k, v in list(tables.items())[:2] if k != "Controls"}
+    # Settings: client-only, not persisted to SPIFFS, excluded from C gen.
+    settings_fields = tables.get("Settings", [])
+    settings_subcats = subcategories.get("Settings", {})
 
-    # Display order: Metadata first, then Variables
+    # Form tables: exclude Settings and Controls (neither maps to SPIFFS XML tables).
+    form_tables = {k: v for k, v in tables.items() if k not in ("Settings", "Controls")}
+
+    # Display order: Metadata first, then Variables.
     if "Metadata" in form_tables and "Variables" in form_tables:
         form_tables = {"Metadata": form_tables["Metadata"], "Variables": form_tables["Variables"]}
 
-    # Validity field names come from Controls > validity subcategory
-    validity_field_names = set(subcategories.get("Controls", {}).get("validity", []))
+    # Validity field names come from Controls > validation + verification subcategories.
+    controls_subcats = subcategories.get("Controls", {})
+    validity_field_names = set(
+        controls_subcats.get("validation", []) + controls_subcats.get("verification", [])
+    )
 
     with open(template_path, "r") as f:
         template = f.read()
 
     # ── JS outputs ──
-    validator_js = gen_validator_js(form_tables)
+    # Include Settings fields so boolean validation rule is generated.
+    all_js_tables = dict(form_tables)
+    if settings_fields:
+        all_js_tables["Settings"] = settings_fields
+    validator_js = gen_validator_js(all_js_tables)
     validity_js = gen_validity_js() if validity_field_names else ""
 
     # validity.js contains both validator + validity checker
@@ -1136,8 +1647,20 @@ def main():
     with open("validity.js", "w") as f:
         f.write(combined_js)
 
+    # ── Settings bar + headers block + stable JS ──
+    settings_block = gen_settings_block("Settings", settings_subcats, settings_fields) \
+        if settings_fields else ""
+    headers_fields = settings_subcats.get("headers", [])
+    headers_field_map = {n: typ for n, typ in settings_fields}
+    headers_block = gen_headers_block(headers_fields, headers_field_map) \
+        if headers_fields else ""
+    stable_js = gen_stable_js()
+
     # HTML: form_tables only, validity fields get special oninput handler
-    base = template.replace("%TABLE_BLOCKS%", gen_table_blocks(
+    base = template.replace("%SETTINGS_BLOCK%", settings_block)
+    base = base.replace("%HEADERS_BLOCK%", headers_block)
+    base = base.replace("%STABLE_JS%", stable_js)
+    base = base.replace("%TABLE_BLOCKS%", gen_table_blocks(
         form_tables, validity_field_names, subcategories,
         hidden_by_default={"Metadata"}))
     base = base.replace("%SCHEMA_JS%", gen_schema_js(form_tables))

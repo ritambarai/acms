@@ -1,6 +1,6 @@
 
 #include <Arduino.h>
-#include <WiFi.h>
+#include <WiFi.h>       /* for WiFi.localIP() in log message */
 #include <WebServer.h>
 #include <SPIFFS.h>
 

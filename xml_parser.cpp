@@ -12,7 +12,7 @@
 
 metadata_table_t metadata_table = { .count = 0, .version = 0 };
 variables_description_table_t variables_description_table = { .count = 0, .version = 0 };
-variables_values_table_t variables_values_table = { .count = 0, .version = 0 };
+variables_constraints_table_t variables_constraints_table = { .count = 0, .version = 0 };
 variables_modbus_table_t variables_modbus_table = { .count = 0, .version = 0 };
 
 /* ── extract value between <tag>…</tag> or detect <tag/> ── */
@@ -97,8 +97,8 @@ int load_metadata_from_spiffs(void) {
 }
 
 
-/* ═══════ Variables: parse XML → variables_description, variables_values, variables_modbus tables ═══════ */
-static int parse_variables_xml(const char *xml, variables_description_table_t *description_tbl, variables_values_table_t *values_tbl, variables_modbus_table_t *modbus_tbl) {
+/* ═══════ Variables: parse XML → variables_description, variables_constraints, variables_modbus tables ═══════ */
+static int parse_variables_xml(const char *xml, variables_description_table_t *description_tbl, variables_constraints_table_t *constraints_tbl, variables_modbus_table_t *modbus_tbl) {
   int count = 0;
   const char *pos = xml;
   char buf[256];
@@ -128,36 +128,36 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
     }
     description_tbl->rows[count].Type = buf[0] ? strdup(buf) : NULL;
 
-    /* ── values ── */
     extract_tag(row_start, "Value", buf, sizeof(buf));
-    if (buf[0] && !validate_variables_values_value(COL_VARIABLES_VALUES_VALUE_FLOAT, buf)) {
+    if (buf[0] && !validate_variables_description_value(COL_VARIABLES_DESCRIPTION_VALUE_FLOAT, buf)) {
       pos = row_end + 6; continue;
     }
-    values_tbl->rows[count].Value = buf[0] ? (float)atof(buf) : -9999.0f;
+    description_tbl->rows[count].Value = buf[0] ? (float)atof(buf) : -9999.0f;
 
+    /* ── constraints ── */
     extract_tag(row_start, "Operation_ID", buf, sizeof(buf));
-    if (buf[0] && !validate_variables_values_value(COL_VARIABLES_VALUES_OPERATION_ID_FLOAT, buf)) {
+    if (buf[0] && !validate_variables_constraints_value(COL_VARIABLES_CONSTRAINTS_OPERATION_ID_FLOAT, buf)) {
       pos = row_end + 6; continue;
     }
-    values_tbl->rows[count].Operation_ID = buf[0] ? (float)atof(buf) : -9999.0f;
+    constraints_tbl->rows[count].Operation_ID = buf[0] ? (float)atof(buf) : -9999.0f;
 
     extract_tag(row_start, "Threshold", buf, sizeof(buf));
-    if (buf[0] && !validate_variables_values_value(COL_VARIABLES_VALUES_THRESHOLD_FLOAT, buf)) {
+    if (buf[0] && !validate_variables_constraints_value(COL_VARIABLES_CONSTRAINTS_THRESHOLD_FLOAT, buf)) {
       pos = row_end + 6; continue;
     }
-    values_tbl->rows[count].Threshold = buf[0] ? (float)atof(buf) : -9999.0f;
+    constraints_tbl->rows[count].Threshold = buf[0] ? (float)atof(buf) : -9999.0f;
 
     extract_tag(row_start, "Fault_Code", buf, sizeof(buf));
-    if (buf[0] && !validate_variables_values_value(COL_VARIABLES_VALUES_FAULT_CODE_FLOAT, buf)) {
+    if (buf[0] && !validate_variables_constraints_value(COL_VARIABLES_CONSTRAINTS_FAULT_CODE_FLOAT, buf)) {
       pos = row_end + 6; continue;
     }
-    values_tbl->rows[count].Fault_Code = buf[0] ? (float)atof(buf) : -9999.0f;
+    constraints_tbl->rows[count].Fault_Code = buf[0] ? (float)atof(buf) : -9999.0f;
 
     extract_tag(row_start, "Increment", buf, sizeof(buf));
-    if (buf[0] && !validate_variables_values_value(COL_VARIABLES_VALUES_INCREMENT_FLOAT, buf)) {
+    if (buf[0] && !validate_variables_constraints_value(COL_VARIABLES_CONSTRAINTS_INCREMENT_FLOAT, buf)) {
       pos = row_end + 6; continue;
     }
-    values_tbl->rows[count].Increment = buf[0] ? (float)atof(buf) : -9999.0f;
+    constraints_tbl->rows[count].Increment = buf[0] ? (float)atof(buf) : -9999.0f;
 
     /* ── modbus ── */
     extract_tag(row_start, "Slave_ID", buf, sizeof(buf));
@@ -184,14 +184,16 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
     }
     modbus_tbl->rows[count].Data_Length = buf[0] ? (float)atof(buf) : -9999.0f;
 
-    /* link modbus value_ptr → values.Value */
-    modbus_tbl->rows[count].value_ptr = &values_tbl->rows[count].Value;
+    /* link constraints value_ptr → description.Value */
+    constraints_tbl->rows[count].value_ptr = &description_tbl->rows[count].Value;
+    /* link modbus value_ptr → description.Value */
+    modbus_tbl->rows[count].value_ptr = &description_tbl->rows[count].Value;
 
     count++;
     pos = row_end + 6;
   }
   description_tbl->count = count;
-  values_tbl->count = count;
+  constraints_tbl->count = count;
   modbus_tbl->count = count;
   return count;
 }
@@ -213,9 +215,9 @@ int load_variables_from_spiffs(void) {
   if (!f) return 0;
   String content = f.readString();
   f.close();
-  int n = parse_variables_xml(content.c_str(), &variables_description_table, &variables_values_table, &variables_modbus_table);
+  int n = parse_variables_xml(content.c_str(), &variables_description_table, &variables_constraints_table, &variables_modbus_table);
   variables_description_table.version++;
-  variables_values_table.version++;
+  variables_constraints_table.version++;
   variables_modbus_table.version++;
   return n;
 }
