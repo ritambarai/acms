@@ -1,0 +1,7 @@
+<Metadata>
+<row><Key>0</Key><Message>choice</Message><Class>type</Class></row>
+<row><Key>1</Key><Message>numeric</Message><Class>type</Class></row>
+<row><Key>1</Key><Message>bar</Message><Class>pressure</Class></row>
+<row><Key>1</Key><Message>Less than</Message><Class>Operation_ID</Class></row>
+<row><Key>1</Key><Message>TOO LOW</Message><Class>Fault_Code</Class></row>
+</Metadata>
