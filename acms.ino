@@ -2,9 +2,10 @@
 #include "network_manager.h"
 #include "acms_web.h"
 extern "C" {
-#include "schema.h"   /* settings_wifi_t settings_wifi */
+#include "schema.h"   /* settings_general_t settings_general */
 }
-extern int load_settings_from_spiffs(void);
+extern int  load_settings_from_spiffs(void);
+extern void provision_spiffs_xml(void);
 
 /* ── Web interface login ── */
 #define WEB_USER     "admin"
@@ -15,12 +16,15 @@ void setup()
     Serial.begin(115200);
     delay(1000);
 
-    /* Mount SPIFFS and populate all settings structs before anything else */
+    /* Mount SPIFFS; write XMLs from firmware defaults if absent (first flash),
+     * then load live settings — so every boot either uses the user-saved XML
+     * or falls back to the default XML created right here. */
     SPIFFS.begin(true);
-    load_settings_from_spiffs();
+    provision_spiffs_xml();     /* create Metadata/Variables/Settings.xml if missing */
+    load_settings_from_spiffs(); /* read Settings.xml (always present after provision) */
 
     /* ---------------- WiFi + DNS/mDNS ---------------- */
-    wifi_manager_init(settings_wifi.SSID, settings_wifi.Password);
+    wifi_manager_init(settings_general.SSID, settings_general.Password);
 
     /* ---------------- System init ---------------- */
     acms_system_init(WEB_USER, WEB_PASSWORD);

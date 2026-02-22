@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "hashmap.h"
+#include "schema.h"
 
 /* ============================================================
  *  POINTER SENTINEL
@@ -141,12 +142,7 @@ extern bool dirty;
  */
  void dm_system_init(void);
 
-bool dm_set_value(const char *class_name,
-                  const char *type,
-                  const char *var_name,
-                  void       *ext_addr,
-                  float       value,
-                  uint16_t    constraint_idx);
+bool dm_set_value(const variables_description_row_t *row, void *ext_addr);
 
 void get_value(void *ext_addr);
 void get_class_values(const char *class_name);
