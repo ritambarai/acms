@@ -30,14 +30,19 @@ static void dm_test_basic(void)
     /* --------------------------------------------------------
      * SET VALUES (CLASS: SENSOR)
      * -------------------------------------------------------- */
-    dm_set_value("sensor", "temperature",
-                 "float", &temperature, temperature, 0);
+    {
+        variables_description_row_t row;
+        row.constraint_id = -1;
 
-    dm_set_value("sensor", "humidity",
-                 "float", &humidity, humidity, 0);
+        row.Class = "sensor"; row.Name = "temperature"; row.Type = "float"; row.Value = temperature;
+        dm_set_value(&row, &temperature);
 
-    dm_set_value("sensor", "pressure",
-                 "float", &pressure, pressure, 0);
+        row.Class = "sensor"; row.Name = "humidity"; row.Type = "float"; row.Value = humidity;
+        dm_set_value(&row, &humidity);
+
+        row.Class = "sensor"; row.Name = "pressure"; row.Type = "float"; row.Value = pressure;
+        dm_set_value(&row, &pressure);
+    }
 
     printf("Sensor values registered\n");
 
@@ -46,11 +51,15 @@ static void dm_test_basic(void)
      * -------------------------------------------------------- */
     temperature = 26.8f;
     get_value(&temperature);
-    dm_set_value("sensor", "temperature",
-                 "float", &temperature, temperature, 0);
+    {
+        variables_description_row_t row;
+        row.Class = "sensor"; row.Name = "temperature"; row.Type = "float";
+        row.Value = temperature; row.constraint_id = -1;
+        dm_set_value(&row, &temperature);
+    }
 
     printf("Temperature updated\n");
-    
+
     pressure = 40.8f;
     update_variable(&pressure);
 
@@ -59,8 +68,12 @@ static void dm_test_basic(void)
     /* --------------------------------------------------------
      * SET VALUES (CLASS: POWER)
      * -------------------------------------------------------- */
-    dm_set_value("power", "voltage",
-                 "float", &voltage, voltage, 0);
+    {
+        variables_description_row_t row;
+        row.Class = "power"; row.Name = "voltage"; row.Type = "float";
+        row.Value = voltage; row.constraint_id = -1;
+        dm_set_value(&row, &voltage);
+    }
 
     printf("Power values registered\n");
     voltage = 240.0f;
@@ -96,8 +109,12 @@ static void dm_test_basic(void)
     temperature = 30.0f;
     update_variable(&temperature);
     sync_class(sensor_idx);
-    dm_set_value("sensor", "status",
-                 "bool", &status, status, 0);
+    {
+        variables_description_row_t row;
+        row.Class = "sensor"; row.Name = "status"; row.Type = "bool";
+        row.Value = status; row.constraint_id = 0;
+        dm_set_value(&row, &status);
+    }
     get_class_values("sensor");  
 }
 
