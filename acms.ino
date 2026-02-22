@@ -1,4 +1,5 @@
 #include <SPIFFS.h>
+#include <Preferences.h>
 #include "network_manager.h"
 #include "acms_web.h"
 extern "C" {
@@ -11,10 +12,31 @@ extern void provision_spiffs_xml(void);
 #define WEB_USER     "admin"
 #define WEB_PASSWORD "admin123"
 
+/* Build ID changes every compile — used to detect a fresh flash. */
+static const char FIRMWARE_BUILD_ID[] = __DATE__ " " __TIME__;
+
 void setup()
 {
     Serial.begin(115200);
     delay(1000);
+
+    /* ── Wipe SPIFFS on every new flash ──
+     * Compare the firmware build ID stored in NVS against the current one.
+     * A mismatch means new firmware was just flashed → format SPIFFS so stale
+     * XML files from a previous build are never used.  On plain reboots the IDs
+     * match and SPIFFS is left intact. */
+    {
+        Preferences prefs;
+        prefs.begin("acms", false);
+        String stored = prefs.getString("build_id", "");
+        if (stored != FIRMWARE_BUILD_ID) {
+            Serial.println("New firmware detected — formatting SPIFFS...");
+            SPIFFS.format();
+            prefs.putString("build_id", FIRMWARE_BUILD_ID);
+            Serial.println("SPIFFS formatted.");
+        }
+        prefs.end();
+    }
 
     /* Mount SPIFFS; write XMLs from firmware defaults if absent (first flash),
      * then load live settings — so every boot either uses the user-saved XML

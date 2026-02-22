@@ -12,6 +12,7 @@ extern "C" {
 #include "json_telemetry.h"
 #include "acms_web.h"
 #include "web_page.h"
+#include "xml_defaults.h"
 
 /* xml_parser.cpp functions */
 extern int  load_variables_from_spiffs(void);
@@ -87,19 +88,25 @@ static void handle_reboot() {
   reboot_at = millis() + 500;   /* 500 ms gives the response time to flush */
 }
 
-/* ── GET /<Table>.xml → serve from SPIFFS ── */
+/* ── GET /<Table>.xml → serve from SPIFFS, fall back to embedded default ── */
 static void handle_get_xml() {
   if (!require_auth()) return;
   String uri = server.uri();
 
-  if (!SPIFFS.exists(uri)) {
-    server.send(404, "text/plain", "Not found");
+  if (SPIFFS.exists(uri)) {
+    File f = SPIFFS.open(uri, "r");
+    server.streamFile(f, "application/xml");
+    f.close();
     return;
   }
 
-  File f = SPIFFS.open(uri, "r");
-  server.streamFile(f, "application/xml");
-  f.close();
+  /* SPIFFS file absent — serve the embedded compile-time default */
+  const char *fallback = nullptr;
+  if      (uri == "/Metadata.xml")  fallback = METADATA_XML_DEFAULT;
+  else if (uri == "/Variables.xml") fallback = VARIABLES_XML_DEFAULT;
+
+  if (fallback) server.send(200, "application/xml", fallback);
+  else          server.send(404, "text/plain", "Not found");
 }
 
 /* ── GET /Settings.xml → generate from live settings structs ── */

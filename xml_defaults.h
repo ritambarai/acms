@@ -16,33 +16,18 @@ static const char METADATA_XML_DEFAULT[] = R"XMLRAW(
 
 static const char VARIABLES_XML_DEFAULT[] = R"XMLRAW(
 <Variables>
-<row>
-  <description><Class>sensor</Class><Name>pressure</Name><Type>main</Type><Value>1.54</Value></description>
-  <constraints><Operation_ID>1</Operation_ID><Threshold>10</Threshold><Fault_Code>1</Fault_Code><Increment/></constraints>
-  <modbus><Slave_ID/><Function_ID/><Start_Address/><Data_Length/></modbus>
-</row>
-<row>
-  <description><Class>sensor</Class><Name>pressure</Name><Type>type</Type><Value>1</Value></description>
-  <constraints><Operation_ID/><Threshold/><Fault_Code/><Increment/></constraints>
-  <modbus><Slave_ID/><Function_ID/><Start_Address/><Data_Length/></modbus>
-</row>
-<row>
-  <description><Class>sensor</Class><Name>pressure</Name><Type>unit</Type><Value>1</Value></description>
-  <constraints><Operation_ID/><Threshold/><Fault_Code/><Increment/></constraints>
-  <modbus><Slave_ID/><Function_ID/><Start_Address/><Data_Length/></modbus>
-</row>
-<row>
-  <description><Class>sensor</Class><Name>status</Name><Type>unit</Type><Value>1</Value></description>
-  <constraints><Operation_ID/><Threshold/><Fault_Code/><Increment/></constraints>
-  <modbus><Slave_ID/><Function_ID/><Start_Address/><Data_Length/></modbus>
-</row>
+<row><Class>sensor</Class><Name>pressure</Name><Type>main</Type><Value>1.54</Value><Operation_ID>1</Operation_ID><Threshold>10</Threshold><Fault_Code>1</Fault_Code><Increment/><Slave_ID/><Function_ID/><Start_Address/><Data_Length/></row>
+<row><Class>sensor</Class><Name>pressure</Name><Type>type</Type><Value>1</Value><Operation_ID/><Threshold/><Fault_Code/><Increment/><Slave_ID/><Function_ID/><Start_Address/><Data_Length/></row>
+<row><Class>sensor</Class><Name>pressure</Name><Type>unit</Type><Value>1</Value><Operation_ID/><Threshold/><Fault_Code/><Increment/><Slave_ID/><Function_ID/><Start_Address/><Data_Length/></row>
+<row><Class>sensor</Class><Name>status</Name><Type>unit</Type><Value>1</Value><Operation_ID/><Threshold/><Fault_Code/><Increment/><Slave_ID/><Function_ID/><Start_Address/><Data_Length/></row>
+<row><Class>sensor</Class><Name>pressure</Name><Type>side</Type><Value>1.54</Value><Operation_ID/><Threshold/><Fault_Code/><Increment>0.01</Increment><Slave_ID/><Function_ID/><Start_Address/><Data_Length/></row>
 </Variables>
 )XMLRAW";
 
 static const char SETTINGS_XML_DEFAULT[] = R"XMLRAW(
 <Settings>
-<row><general><SSID></SSID><Password></Password><Class_Pool_Size>32</Class_Pool_Size><Var_Pool_Size>128</Var_Pool_Size></general></row>
-<row><mqtt><Host>mqtt-server.ddns.net</Host><Port>1883</Port><Data_Topic>ACMS_Rey/01/</Data_Topic><Alert_Topic></Alert_Topic><Username></Username><Mqtt_Password></Mqtt_Password></mqtt></row>
-<row><json><Metadata>false</Metadata><Constraints>false</Constraints><Modbus>false</Modbus></json></row>
+  <row><general><SSID>Airtel_dish_8109</SSID><Password>Air@39818</Password><Class_Pool_Size>32</Class_Pool_Size><Var_Pool_Size>128</Var_Pool_Size></general></row>
+  <row><mqtt><Host>mqtt-server.ddns.net</Host><Port>1883</Port><Data_Topic>ACMS_Rey/01/</Data_Topic><Alert_Topic></Alert_Topic><Username></Username><Mqtt_Password></Mqtt_Password></mqtt></row>
+  <row><json><Metadata>false</Metadata><Constraints>false</Constraints><Modbus>false</Modbus></json></row>
 </Settings>
 )XMLRAW";
