@@ -19,6 +19,7 @@
 #include <DNSServer.h>
 #include <WebServer.h>
 #include <SPIFFS.h>
+#include <Preferences.h>
 #include <PubSubClient.h>
 
 #include "network_manager.h"
@@ -33,9 +34,8 @@ static bool      dns_running = false;
 static WiFiClient  espClient;
 PubSubClient       mqtt(espClient);
 
-/* ── AP portal page ───────────────────────────────────────────── */
-static const char AP_PAGE[] PROGMEM = R"HTML(
-<!DOCTYPE html><html>
+/* ── AP portal page — split so scan results can be injected ──── */
+static const char AP_PAGE_TOP[] PROGMEM = R"HTML(<!DOCTYPE html><html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -45,106 +45,84 @@ static const char AP_PAGE[] PROGMEM = R"HTML(
     body{font-family:sans-serif;max-width:420px;margin:60px auto;padding:24px}
     h2{text-align:center;margin-bottom:24px}
     label{display:block;margin-top:16px;font-weight:600;font-size:.9em}
-    input[type=text],input[type=password]{width:100%;padding:10px;margin-top:6px;border:1px solid #ccc;border-radius:4px;font-size:1em}
+    input[type=text],input[type=password],select{width:100%;padding:10px;margin-top:6px;border:1px solid #ccc;border-radius:4px;font-size:1em;background:#fff}
     button{width:100%;padding:12px;margin-top:20px;background:#2c7be5;color:#fff;border:none;border-radius:4px;font-size:1em;cursor:pointer}
     button:hover{background:#1a68d1}
-    #scan-status{font-size:.8em;color:#888;margin-top:6px}
-    #net-list{margin-top:4px;border:1px solid #ddd;border-radius:4px;max-height:180px;overflow-y:auto;display:none}
-    .net-item{padding:8px 12px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #eee}
-    .net-item:last-child{border-bottom:none}
-    .net-item:hover{background:#f0f4ff}
-    .net-ssid{font-size:.95em}
-    .net-rssi{font-size:.8em;color:#888;white-space:nowrap;margin-left:8px}
   </style>
 </head>
 <body>
   <h2>ACMS WiFi Setup</h2>
   <form method="POST" action="/save">
-    <label>SSID
-      <input id="ssid-input" name="ssid" type="text" placeholder="Network name" required autocomplete="off">
+    <label>Available SSIDs:
+      <select name="ssid" required>
+        <option value="">-- select a network --</option>
+)HTML";
+
+static const char AP_PAGE_BOT[] PROGMEM = R"HTML(      </select>
     </label>
-    <div id="scan-status">Scanning for networks&hellip;</div>
-    <div id="net-list"></div>
     <label>Password
       <input name="password" type="password" placeholder="Network password" autocomplete="off">
     </label>
     <button type="submit">Connect &amp; Reboot</button>
   </form>
-  <script>
-    function rssiBar(r){
-      if(r>=-60)return"&#9602;&#9604;&#9606;&#9608;";
-      if(r>=-70)return"&#9602;&#9604;&#9606;&nbsp;";
-      if(r>=-80)return"&#9602;&#9604;&nbsp;&nbsp;";
-      return"&#9602;&nbsp;&nbsp;&nbsp;";
-    }
-    fetch('/scan').then(function(r){return r.json();}).then(function(nets){
-      var st=document.getElementById('scan-status');
-      var list=document.getElementById('net-list');
-      if(!nets||nets.length===0){st.textContent='No networks found.';return;}
-      st.textContent=nets.length+' network(s) found \u2014 click to select:';
-      list.style.display='';
-      nets.forEach(function(n){
-        var d=document.createElement('div');
-        d.className='net-item';
-        d.innerHTML='<span class="net-ssid">'+n.ssid+'</span><span class="net-rssi">'+rssiBar(n.rssi)+' '+n.rssi+' dBm</span>';
-        d.onclick=function(){document.getElementById('ssid-input').value=n.ssid;};
-        list.appendChild(d);
-      });
-    }).catch(function(){document.getElementById('scan-status').textContent='Scan failed.';});
-  </script>
 </body>
 </html>
 )HTML";
 
-/* ── Update only the <wifi> row inside Settings.xml ──────────── */
+/* ── Write complete Settings.xml with new WiFi credentials ──── */
 static void save_wifi_to_spiffs(const char *ssid, const char *pass)
 {
-    if (settings_wifi.SSID)     { free(settings_wifi.SSID);     settings_wifi.SSID     = NULL; }
-    if (settings_wifi.Password) { free(settings_wifi.Password); settings_wifi.Password = NULL; }
-    if (ssid && ssid[0]) settings_wifi.SSID     = strdup(ssid);
-    if (pass)            settings_wifi.Password = strdup(pass);
+    /* Update in-memory general struct */
+    if (settings_general.SSID)     { free(settings_general.SSID);     settings_general.SSID     = NULL; }
+    if (settings_general.Password) { free(settings_general.Password); settings_general.Password = NULL; }
+    if (ssid && ssid[0]) settings_general.SSID     = strdup(ssid);
+    if (pass)            settings_general.Password = strdup(pass);
 
-    /* Build the replacement wifi row */
-    char newRow[512];
-    snprintf(newRow, sizeof(newRow),
-             "<row><wifi><SSID>%s</SSID><Password>%s</Password></wifi></row>",
-             settings_wifi.SSID     ? settings_wifi.SSID     : "",
-             settings_wifi.Password ? settings_wifi.Password : "");
-
-    /* Read existing file */
-    String content;
-    File rf = SPIFFS.open("/Settings.xml", "r");
-    if (rf) { content = rf.readString(); rf.close(); }
-
-    /* Replace the wifi row in-place */
-    int start = content.indexOf("<row><wifi>");
-    if (start >= 0) {
-        int end = content.indexOf("</row>", start);
-        if (end >= 0) {
-            end += 6; /* length of "</row>" */
-            content = content.substring(0, start) + newRow + content.substring(end);
-        }
-    } else {
-        /* No wifi row yet — insert before </Settings> */
-        int closing = content.indexOf("</Settings>");
-        if (closing >= 0)
-            content = content.substring(0, closing) + newRow + "\n</Settings>";
-        else
-            content = String("<Settings>\n") + newRow + "\n</Settings>";
-    }
+    /* Write the full Settings.xml in the canonical 3-row format.
+     * Non-WiFi fields use whatever is already in memory (loaded at boot). */
+    char buf[1024];
+    snprintf(buf, sizeof(buf),
+        "<Settings>\n"
+        "<row><general>"
+          "<SSID>%s</SSID><Password>%s</Password>"
+          "<Class_Pool_Size>%d</Class_Pool_Size><Var_Pool_Size>%d</Var_Pool_Size>"
+        "</general></row>\n"
+        "<row><mqtt>"
+          "<Host>%s</Host><Port>%d</Port>"
+          "<Data_Topic>%s</Data_Topic><Alert_Topic>%s</Alert_Topic>"
+          "<Username>%s</Username><Mqtt_Password>%s</Mqtt_Password>"
+        "</mqtt></row>\n"
+        "<row><json>"
+          "<Metadata>%s</Metadata><Constraints>%s</Constraints><Modbus>%s</Modbus>"
+        "</json></row>\n"
+        "</Settings>",
+        settings_general.SSID            ? settings_general.SSID            : "",
+        settings_general.Password        ? settings_general.Password        : "",
+        settings_general.Class_Pool_Size,
+        settings_general.Var_Pool_Size,
+        settings_mqtt.Host               ? settings_mqtt.Host               : "",
+        settings_mqtt.Port,
+        settings_mqtt.Data_Topic         ? settings_mqtt.Data_Topic         : "",
+        settings_mqtt.Alert_Topic        ? settings_mqtt.Alert_Topic        : "",
+        settings_mqtt.Username           ? settings_mqtt.Username           : "",
+        settings_mqtt.Mqtt_Password      ? settings_mqtt.Mqtt_Password      : "",
+        settings_json.Metadata    ? "true" : "false",
+        settings_json.Constraints ? "true" : "false",
+        settings_json.Modbus      ? "true" : "false"
+    );
 
     File wf = SPIFFS.open("/Settings.xml", "w");
     if (!wf) { Serial.println("[AP] SPIFFS write failed"); return; }
-    wf.print(content);
+    wf.print(buf);
     wf.close();
-    Serial.println("[AP] Settings.xml wifi row updated");
+    Serial.println("[AP] Settings.xml updated");
 }
 
 /* ── Blocking AP captive portal — never returns, reboots on save ─ */
 static void start_ap_portal(void)
 {
     Serial.println("[AP] Starting WiFi setup portal  SSID: ACMS Portal(acms-portal.local)");
-    WiFi.mode(WIFI_AP);
+    WiFi.mode(WIFI_AP_STA);   /* STA radio must stay on for scanNetworks() to work */
     WiFi.softAP("ACMS Portal(acms-portal.local)");
     IPAddress apIP = WiFi.softAPIP();
 
@@ -155,22 +133,22 @@ static void start_ap_portal(void)
     WebServer apServer(80);
 
     apServer.on("/", HTTP_GET, [&apServer]() {
-        apServer.send_P(200, "text/html", AP_PAGE);
-    });
-
-    apServer.on("/scan", HTTP_GET, [&apServer]() {
+        /* Scan first — results are embedded directly in the page HTML */
         int n = WiFi.scanNetworks(false, false);   /* blocking, no hidden */
-        String json = "[";
+
+        String page = String(FPSTR(AP_PAGE_TOP));
         for (int i = 0; i < n; i++) {
-            if (i > 0) json += ",";
             String ssid = WiFi.SSID(i);
-            ssid.replace("\\", "\\\\");
-            ssid.replace("\"", "\\\"");
-            json += "{\"ssid\":\"" + ssid + "\",\"rssi\":" + WiFi.RSSI(i) + "}";
+            ssid.replace("&", "&amp;");
+            ssid.replace("<", "&lt;");
+            ssid.replace("\"", "&quot;");
+            page += "        <option value=\"" + ssid + "\">"
+                    + ssid + "  (" + WiFi.RSSI(i) + " dBm)</option>\n";
         }
-        json += "]";
         WiFi.scanDelete();
-        apServer.send(200, "application/json", json);
+        page += String(FPSTR(AP_PAGE_BOT));
+
+        apServer.send(200, "text/html", page);
     });
 
     apServer.on("/save", HTTP_POST, [&apServer, &apIP]() {
@@ -263,37 +241,44 @@ void wifi_manager_loop(void)
         mqtt.loop();
     } else {
         static uint32_t last_reconnect = 0;
-        if (millis() - last_reconnect > 10000) {   /* retry every 10 s */
+        if (millis() - last_reconnect > 30000) {   /* retry every 30 s */
             last_reconnect = millis();
             mqtt_manager_connect();
         }
     }
 }
 
-/* ── MQTT connect / reconnect (non-blocking, 5 s total timeout) ────── */
+/* ── MQTT connect — single attempt, returns immediately on success or failure.
+ *   Retries are scheduled by wifi_manager_loop() every 30 s so the HTTP server
+ *   is never blocked for more than one TCP connect attempt (~1 s worst case). */
 void mqtt_manager_connect(void)
 {
+    if (!settings_mqtt.Host || !settings_mqtt.Host[0]) return;  /* no server configured */
+
     mqtt.setServer(settings_mqtt.Host, settings_mqtt.Port);
     mqtt.setBufferSize(MQTT_BUFFER_SIZE);
 
-    const uint32_t timeout_ms = 5000;
-    uint32_t start = millis();
+    /* Limit how long the TCP handshake can block the main loop. */
+    espClient.setTimeout(1000);   /* 1 s read/connect timeout */
 
-    while (!mqtt.connected()) {
-        if (millis() - start > timeout_ms) {
-            Serial.println("[MQTT] Timed out — continuing without MQTT");
-            return;
-        }
-        Serial.print("[MQTT] Connecting...");
-        if (mqtt.connect(MQTT_CLIENT_ID)) {
-            Serial.println(" connected");
-        } else {
-            Serial.print(" failed rc=");
-            Serial.print(mqtt.state());
-            Serial.println(", retrying");
-            delay(500);
-            yield();
-        }
+    Serial.print("[MQTT] Connecting to ");
+    Serial.print(settings_mqtt.Host);
+    Serial.print("...");
+
+    bool ok;
+    if (settings_mqtt.Username && settings_mqtt.Username[0]) {
+        const char *user = settings_mqtt.Username;
+        const char *pw   = (settings_mqtt.Mqtt_Password && settings_mqtt.Mqtt_Password[0])
+                           ? settings_mqtt.Mqtt_Password : nullptr;
+        ok = mqtt.connect(MQTT_CLIENT_ID, user, pw);
+    } else {
+        ok = mqtt.connect(MQTT_CLIENT_ID);
+    }
+    if (ok) {
+        Serial.println(" connected");
+    } else {
+        Serial.print(" failed rc=");
+        Serial.println(mqtt.state());
     }
 }
 

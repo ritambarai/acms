@@ -268,13 +268,16 @@ bool update_variable(void *ext_addr)
 
 
 
-bool dm_set_value(const char *class_name,
-                  const char *type,
-                  const char *var_name,
-                  void       *ext_addr,
-                  float       value,
-                  uint16_t    constraint_idx)
+bool dm_set_value(const variables_description_row_t *row, void *ext_addr)
 {
+    const char *class_name     = row->Class;
+    const char *var_name       = row->Name;
+    const char *type           = row->Type;
+    float       value          = row->Value;
+    uint16_t    constraint_idx = (row->constraint_id >= 0)
+                                 ? (uint16_t)row->constraint_id
+                                 : INVALID_INDEX;
+
     map_create_flags_t flags = MAPF_NONE;
 
     /* --------------------------------------------------------

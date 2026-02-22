@@ -432,7 +432,13 @@ void json_receive(void)
             return;
         }
 
-        if (!dm_set_value(cls, type, var, ext, value, cid)) {
+        variables_description_row_t new_row;
+        new_row.Class         = (char*)cls;
+        new_row.Name          = (char*)var;
+        new_row.Type          = (char*)type;
+        new_row.Value         = value;
+        new_row.constraint_id = (cid == INVALID_INDEX) ? -1 : (int)cid;
+        if (!dm_set_value(&new_row, ext)) {
             send_response("error", cls, var, 0, "dm_set_value failed");
             return;
         }

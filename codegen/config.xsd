@@ -9,45 +9,41 @@
           <xs:complexType>
             <xs:sequence>
 
-              <!-- ── headers ── -->
-              <xs:element name="headers">
+              <!-- ── header (UI-only controls, not persisted to Settings.xml) ── -->
+              <xs:element name="header" minOccurs="0">
                 <xs:complexType><xs:sequence>
-                  <xs:element name="Download_a_copy" type="xs:boolean"/>
+                  <xs:element name="Download_a_Copy" type="xs:boolean" default="true"/>
                 </xs:sequence></xs:complexType>
               </xs:element>
 
-              <!-- ── wifi ── -->
-              <xs:element name="wifi">
+              <!-- ── general (WiFi credentials + pool sizes) ── -->
+              <xs:element name="general">
                 <xs:complexType><xs:sequence>
-                  <xs:element name="SSID"     type="xs:string"/>
-                  <xs:element name="Password" type="xs:string"/>
+                  <xs:element name="SSID"            type="xs:string"/>
+                  <xs:element name="Password"        type="xs:string"/>
+                  <xs:element name="Class_Pool_Size" type="xs:integer"/>
+                  <xs:element name="Var_Pool_Size"   type="xs:integer"/>
                 </xs:sequence></xs:complexType>
               </xs:element>
 
               <!-- ── mqtt ── -->
               <xs:element name="mqtt">
                 <xs:complexType><xs:sequence>
-                  <xs:element name="Host"        type="xs:string"/>
-                  <xs:element name="Port"        type="xs:integer"/>
-                  <xs:element name="Data_Topic"  type="xs:string"/>
-                  <xs:element name="Alert_Topic" type="xs:string"/>
+                  <xs:element name="Host"          type="xs:string"/>
+                  <xs:element name="Port"          type="xs:integer"/>
+                  <xs:element name="Data_Topic"    type="xs:string"/>
+                  <xs:element name="Alert_Topic"   type="xs:string"/>
+                  <xs:element name="Username"      type="xs:string"/>
+                  <xs:element name="Mqtt_Password" type="xs:string"/>
                 </xs:sequence></xs:complexType>
               </xs:element>
 
-              <!-- ── schema ── -->
-              <xs:element name="schema">
-                <xs:complexType><xs:sequence>
-                  <xs:element name="Class_Pool_Size" type="xs:integer"/>
-                  <xs:element name="Var_Pool_Size"   type="xs:integer"/>
-                </xs:sequence></xs:complexType>
-              </xs:element>
-
-              <!-- ── json ── -->
+              <!-- ── json includes ── -->
               <xs:element name="json">
                 <xs:complexType><xs:sequence>
-                  <xs:element name="Metadata"    type="xs:boolean"/>
-                  <xs:element name="Constraints" type="xs:boolean"/>
-                  <xs:element name="Modbus"      type="xs:boolean"/>
+                  <xs:element name="Metadata"    type="xs:boolean" default="true"/>
+                  <xs:element name="Constraints" type="xs:boolean" default="true"/>
+                  <xs:element name="Modbus"      type="xs:boolean" default="true"/>
                 </xs:sequence></xs:complexType>
               </xs:element>
 

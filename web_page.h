@@ -230,6 +230,32 @@ button {
   font-size: 11px;
   box-sizing: border-box;
 }
+
+.settings-subcat-group {
+  display: flex;
+  gap: 16px;
+  flex: 1;
+}
+
+.settings-subcat-col {
+  flex: 1;
+  border-left: 1px solid #ddd;
+  padding-left: 12px;
+}
+
+.settings-subcat-col:first-child {
+  border-left: none;
+  padding-left: 0;
+}
+
+.subcat-label-inner {
+  font-size: 10px;
+  font-weight: bold;
+  text-transform: uppercase;
+  color: #888;
+  text-align: center;
+  margin-bottom: 4px;
+}
 </style>
 </head>
 
@@ -239,8 +265,8 @@ button {
   <div id="submit-area">
     <button id="submit-btn" onclick="submitAll()">Submit</button>
     <label class="check-label">
-  <input type="checkbox" data-name="Download_a_copy" data-type="boolean">
-  Download a copy
+  <input type="checkbox" data-name="Download_a_Copy" data-type="boolean" checked>
+  Download a Copy
 </label>
 
   </div>
@@ -254,7 +280,7 @@ button {
   </h3>
   <div id="Settings_collapsible" style="display:none">
     <div class="subcat-row">
-      <span class="subcat-label">wifi</span>
+      <span class="subcat-label">general</span>
       <div class="form-grid">
         <div class="field">
           <label>SSID</label>
@@ -264,6 +290,16 @@ button {
         <div class="field">
           <label>Password</label>
           <input placeholder="string" data-type="string" data-name="Password" oninput="validateField(this)">
+          <span class="error-msg"></span>
+        </div>
+        <div class="field">
+          <label>Class Pool Size</label>
+          <input placeholder="integer" data-type="integer" data-name="Class_Pool_Size" oninput="validateField(this)">
+          <span class="error-msg"></span>
+        </div>
+        <div class="field">
+          <label>Var Pool Size</label>
+          <input placeholder="integer" data-type="integer" data-name="Var_Pool_Size" oninput="validateField(this)">
           <span class="error-msg"></span>
         </div>
       </div>
@@ -291,19 +327,14 @@ button {
           <input placeholder="string" data-type="string" data-name="Alert_Topic" oninput="validateField(this)">
           <span class="error-msg"></span>
         </div>
-      </div>
-    </div>
-    <div class="subcat-row">
-      <span class="subcat-label">schema</span>
-      <div class="form-grid">
         <div class="field">
-          <label>Class Pool Size</label>
-          <input placeholder="integer" data-type="integer" data-name="Class_Pool_Size" oninput="validateField(this)">
+          <label>Username</label>
+          <input placeholder="string" data-type="string" data-name="Username" oninput="validateField(this)">
           <span class="error-msg"></span>
         </div>
         <div class="field">
-          <label>Var Pool Size</label>
-          <input placeholder="integer" data-type="integer" data-name="Var_Pool_Size" oninput="validateField(this)">
+          <label>Mqtt Password</label>
+          <input placeholder="string" data-type="string" data-name="Mqtt_Password" oninput="validateField(this)">
           <span class="error-msg"></span>
         </div>
       </div>
@@ -329,6 +360,27 @@ button {
       </div>
     </div>
     <button onclick="saveSettings()" class="insert-btn">Save</button>
+    <div class="table-wrap">
+      <table>
+      <thead><tr>
+        <th>Category</th>
+        <th>SSID</th>
+        <th>Password</th>
+        <th>Class_Pool_Size</th>
+        <th>Var_Pool_Size</th>
+        <th>Host</th>
+        <th>Port</th>
+        <th>Data_Topic</th>
+        <th>Alert_Topic</th>
+        <th>Username</th>
+        <th>Mqtt_Password</th>
+        <th>Metadata</th>
+        <th>Constraints</th>
+        <th>Modbus</th>
+      </tr></thead>
+      <tbody id="Settings_body"></tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -355,7 +407,7 @@ button {
     </div>
     <div class="field">
       <label>Class</label>
-      <input placeholder="string" data-type="string" data-name="Class" oninput="validateField(this); var ni=document.getElementById('Metadata_form').querySelector('[data-field="Name"]'); if(ni) validateValidityField(ni)">
+      <input placeholder="string" data-type="string" data-name="Class" oninput="validateField(this); var ni=document.getElementById('Metadata_form').querySelector('[data-field=Name]'); if(ni) validateValidityField(ni)">
       <span class="error-msg"></span>
     </div>
   </div>
@@ -390,7 +442,7 @@ button {
     <div class="form-grid">
     <div class="field">
       <label>Class</label>
-      <input placeholder="string" data-type="string" data-name="Class" oninput="validateField(this); var ni=document.getElementById('Variables_form').querySelector('[data-field="Name"]'); if(ni) validateValidityField(ni)">
+      <input placeholder="string" data-type="string" data-name="Class" oninput="validateField(this); var ni=document.getElementById('Variables_form').querySelector('[data-field=Name]'); if(ni) validateValidityField(ni)">
       <span class="error-msg"></span>
     </div>
     <div class="field">
@@ -400,7 +452,7 @@ button {
     </div>
     <div class="field">
       <label>Type</label>
-      <input placeholder="string" data-type="string" data-name="Type" oninput="validateField(this); var vi=document.getElementById('Variables_form').querySelector('[data-field="Value"]'); if(vi) validateValidityField(vi); var ni=document.getElementById('Variables_form').querySelector('[data-field="Name"]'); if(ni) validateValidityField(ni)">
+      <input placeholder="string" data-type="string" data-name="Type" oninput="validateField(this); var vi=document.getElementById('Variables_form').querySelector('[data-field=Value]'); if(vi) validateValidityField(vi); var ni=document.getElementById('Variables_form').querySelector('[data-field=Name]'); if(ni) validateValidityField(ni)">
       <span class="error-msg"></span>
     </div>
     <div class="field">
@@ -516,11 +568,11 @@ var Variables_SCHEMA = [
 var TABLE_LIST = ["Metadata", "Variables"];
 
 var Settings_SUBCATS = {
-  wifi: ["SSID", "Password"],
-  mqtt: ["Host", "Port", "Data_Topic", "Alert_Topic"],
-  schema: ["Class_Pool_Size", "Var_Pool_Size"],
+  general: ["SSID", "Password", "Class_Pool_Size", "Var_Pool_Size"],
+  mqtt: ["Host", "Port", "Data_Topic", "Alert_Topic", "Username", "Mqtt_Password"],
   json: ["Metadata", "Constraints", "Modbus"]
 };
+var Settings_TABLE_COLS = ["SSID", "Password", "Class_Pool_Size", "Var_Pool_Size", "Host", "Port", "Data_Topic", "Alert_Topic", "Username", "Mqtt_Password", "Metadata", "Constraints", "Modbus"];
 
 
 /* ======== PRELOADED XML (embedded at build time) ======== */
@@ -741,7 +793,7 @@ function toggleSection(table, btn) {
 
 
 /* ---------- TOGGLE SETTINGS SECTION ---------- */
-/* Collapses all Settings subcategories except headers (always visible). */
+/* Collapses all Settings subcategories except header (always visible). */
 function toggleSettingsSection(name, btn) {
   var collapsible = document.getElementById(name + "_collapsible");
   if (!collapsible) return;
@@ -856,30 +908,86 @@ function downloadZIP() {
 }
 
 
-/* ---------- SAVE SETTINGS (stores to state + logs to console) ---------- */
-function saveSettings() {
+/* ---------- UPDATE SETTINGS TABLE ---------- */
+function updateSettingsTable() {
+  var tbody = document.getElementById("Settings_body");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+  Object.keys(Settings_SUBCATS).forEach(function(cat) {
+    var cat_val = Settings_SUBCATS[cat];
+    var tr = document.createElement("tr");
+    var catTd = document.createElement("td");
+    catTd.textContent = cat;
+    tr.appendChild(catTd);
+    Settings_TABLE_COLS.forEach(function(col) {
+      var td = document.createElement("td");
+      var belongs = false;
+      if (Array.isArray(cat_val)) {
+        belongs = cat_val.indexOf(col) !== -1;
+      } else {
+        Object.keys(cat_val).forEach(function(inner) {
+          if (cat_val[inner].indexOf(col) !== -1) belongs = true;
+        });
+      }
+      td.textContent = belongs ? (state["Settings"][col] !== undefined ? state["Settings"][col] : "") : "—";
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+}
+
+
+/* ---------- SAVE SETTINGS (stores to state, POSTs to /Settings.xml on ESP) ---------- */
+async function saveSettings() {
   state["Settings"] = {};
   document.querySelectorAll(".settings-bar input[data-name]").forEach(function(inp) {
-    if (inp.dataset.name === "Download_a_copy") return;
+    if (inp.dataset.name === "Download_a_Copy") return;
     var val = inp.type === "checkbox" ? String(inp.checked) : inp.value.trim();
     state["Settings"][inp.dataset.name] = val;
   });
   console.group("[ACMS] Settings state");
   console.table(state["Settings"]);
   console.groupEnd();
+  updateSettingsTable();
+  if (location.hostname !== "") {
+    try {
+      const r = await fetch("/Settings.xml", {
+        method: "POST",
+        headers: { "Content-Type": "application/xml" },
+        body: settingsToXML()
+      });
+      if (!r.ok) throw new Error("Save failed (" + r.status + ")");
+    } catch(e) {
+      alert("Error saving settings: " + e.message);
+      return;
+    }
+  }
+  alert("Updates have been saved successfully");
 }
 
 
 /* ---------- SETTINGS TO XML ---------- */
-/* Produces one <row> per subcategory — 4 rows total matching the XSD. */
+/* Produces one <row> per category. Groups emit nested inner-subcat elements. */
 function settingsToXML() {
   var xml = "<Settings>\n";
   Object.keys(Settings_SUBCATS).forEach(function(sc) {
+    var sc_val = Settings_SUBCATS[sc];
     xml += "  <row><" + sc + ">";
-    Settings_SUBCATS[sc].forEach(function(field) {
-      var val = (state["Settings"][field] !== undefined) ? state["Settings"][field] : "";
-      xml += "<" + field + ">" + val + "</" + field + ">";
-    });
+    if (Array.isArray(sc_val)) {
+      sc_val.forEach(function(field) {
+        var val = (state["Settings"][field] !== undefined) ? state["Settings"][field] : "";
+        xml += "<" + field + ">" + val + "</" + field + ">";
+      });
+    } else {
+      Object.keys(sc_val).forEach(function(inner_sc) {
+        xml += "<" + inner_sc + ">";
+        sc_val[inner_sc].forEach(function(field) {
+          var val = (state["Settings"][field] !== undefined) ? state["Settings"][field] : "";
+          xml += "<" + field + ">" + val + "</" + field + ">";
+        });
+        xml += "</" + inner_sc + ">";
+      });
+    }
     xml += "</" + sc + "></row>\n";
   });
   xml += "</Settings>";
@@ -888,34 +996,40 @@ function settingsToXML() {
 
 
 /* ---------- LOAD SETTINGS (ESP only — populate inputs + state from /Settings.xml) ---------- */
+/* Uses simple indexOf-based tag extraction (mirrors C++ extract_tag) instead of
+ * DOMParser so it never silently fails on slightly malformed XML. */
 function loadSettings() {
   if (location.hostname === "") return;
   fetch("/Settings.xml", { cache: "no-store" })
     .then(function(r) { if (r.ok) return r.text(); })
     .then(function(xml) {
       if (!xml) return;
-      var parser = new DOMParser();
-      var doc = parser.parseFromString(xml, "application/xml");
       state["Settings"] = {};
-      var rows = doc.getElementsByTagName("row");
-      for (var i = 0; i < rows.length; i++) {
-        Object.keys(Settings_SUBCATS).forEach(function(sc) {
-          var scEl = rows[i].getElementsByTagName(sc)[0];
-          if (!scEl) return;
-          Settings_SUBCATS[sc].forEach(function(field) {
-            var el = scEl.getElementsByTagName(field)[0];
-            if (!el) return;
-            var val = el.textContent.trim();
-            state["Settings"][field] = val;
-            var inp = document.querySelector(".settings-bar input[data-name='" + field + "']");
-            if (!inp) return;
-            if (inp.type === "checkbox") inp.checked = (val === "true");
-            else inp.value = val;
-          });
-        });
+
+      /* Extract the text content between <Tag>…</Tag>. Returns null if absent. */
+      function extractTag(str, tag) {
+        var open  = "<" + tag + ">";
+        var close = "</" + tag + ">";
+        var s = str.indexOf(open);
+        if (s === -1) return null;
+        s += open.length;
+        var e = str.indexOf(close, s);
+        if (e === -1) return null;
+        return str.substring(s, e).trim();
       }
+
+      Settings_TABLE_COLS.forEach(function(field) {
+        var val = extractTag(xml, field);
+        if (val === null) return;
+        state["Settings"][field] = val;
+        var inp = document.querySelector(".settings-bar input[data-name='" + field + "']");
+        if (!inp) return;
+        if (inp.type === "checkbox") inp.checked = (val === "true");
+        else inp.value = val;
+      });
     })
-    .catch(function() {});
+    .then(function() { updateSettingsTable(); })
+    .catch(function(e) { console.error("[ACMS] loadSettings failed:", e); });
 }
 
 
@@ -924,8 +1038,8 @@ async function submitAll() {
 
   const isESP = location.hostname !== "";
 
-  /* Read Download_a_copy checkbox from submit-area */
-  var dlInput = document.querySelector('#submit-area [data-name="Download_a_copy"]');
+  /* Read Download_a_Copy checkbox from submit-area */
+  var dlInput = document.querySelector('#submit-area [data-name="Download_a_Copy"]');
   var dlChecked = dlInput && dlInput.checked;
 
   if (isESP) {
@@ -944,7 +1058,15 @@ async function submitAll() {
         if (!r.ok) throw new Error(t + " save failed (" + r.status + ")");
       }
 
-      if (Object.keys(state["Settings"] || {}).length > 0) {
+      if (Object.keys(state["Settings"] || {}).length === 0) {
+        document.querySelectorAll(".settings-bar input[data-name]").forEach(function(inp) {
+          if (inp.dataset.name === "Download_a_Copy") return;
+          state["Settings"] = state["Settings"] || {};
+          var val = inp.type === "checkbox" ? String(inp.checked) : inp.value.trim();
+          state["Settings"][inp.dataset.name] = val;
+        });
+      }
+      {
         const r = await fetch("/Settings.xml", {
           method: "POST",
           headers: { "Content-Type": "application/xml" },
@@ -1140,7 +1262,7 @@ function validateValidityField(input) {
     var typeVal = typeInput ? typeInput.value.trim().toLowerCase() : "";
     var half = input.closest(".half");
     var insertBtn = half ? half.querySelector(".insert-btn") : null;
-    if (typeVal === "type" || typeVal === "units" || typeVal === "verification") {
+    if (typeVal === "type" || typeVal === "unit" || typeVal === "verification") {
       input.style.borderColor = "";
       input.classList.remove("invalid");
       errSpan.textContent = "";
@@ -1230,13 +1352,13 @@ function validateValidityField(input) {
       return false;
     }
 
-    /* ── Step 6: resolve unit message from Metadata (use classKey class only) ── */
+    /* ── Step 6: resolve unit message from Metadata (use nameKey as Metadata class) ── */
     var uKeyVal = (nameDict[unitRowKey]["Value"] !== null && nameDict[unitRowKey]["Value"] !== undefined)
       ? String(nameDict[unitRowKey]["Value"]) : "";
     /* normalize float key: "1.0" → "1" so it matches Metadata Key column */
     var uKeyNorm = (uKeyVal !== "" && isFinite(uKeyVal)) ? String(parseFloat(uKeyVal)) : uKeyVal;
     var uClassKey = Object.keys(dict).find(function(k) {
-      return k.toLowerCase() === classKey.toLowerCase();
+      return k.toLowerCase() === nameKey.toLowerCase();
     });
     var uMsg = (uClassKey && dict[uClassKey].hasOwnProperty(uKeyNorm))
       ? dict[uClassKey][uKeyNorm] : null;

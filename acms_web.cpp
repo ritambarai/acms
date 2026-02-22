@@ -102,41 +102,36 @@ static void handle_get_xml() {
   f.close();
 }
 
-/* ── GET /Settings.xml → generate from live settings struct ── */
+/* ── GET /Settings.xml → generate from live settings structs ── */
 static void handle_get_settings_xml() {
   if (!require_auth()) return;
 
   char buf[1024];
   snprintf(buf, sizeof(buf),
     "<Settings>\n"
-    "  <row><wifi>"
-      "<SSID>%s</SSID>"
-      "<Password>%s</Password>"
-    "</wifi></row>\n"
-    "  <row><mqtt>"
-      "<Host>%s</Host>"
-      "<Port>%d</Port>"
-      "<Data_Topic>%s</Data_Topic>"
-      "<Alert_Topic>%s</Alert_Topic>"
+    "<row><general>"
+      "<SSID>%s</SSID><Password>%s</Password>"
+      "<Class_Pool_Size>%d</Class_Pool_Size><Var_Pool_Size>%d</Var_Pool_Size>"
+    "</general></row>\n"
+    "<row><mqtt>"
+      "<Host>%s</Host><Port>%d</Port>"
+      "<Data_Topic>%s</Data_Topic><Alert_Topic>%s</Alert_Topic>"
+      "<Username>%s</Username><Mqtt_Password>%s</Mqtt_Password>"
     "</mqtt></row>\n"
-    "  <row><schema>"
-      "<Class_Pool_Size>%d</Class_Pool_Size>"
-      "<Var_Pool_Size>%d</Var_Pool_Size>"
-    "</schema></row>\n"
-    "  <row><json>"
-      "<Metadata>%s</Metadata>"
-      "<Constraints>%s</Constraints>"
-      "<Modbus>%s</Modbus>"
+    "<row><json>"
+      "<Metadata>%s</Metadata><Constraints>%s</Constraints><Modbus>%s</Modbus>"
     "</json></row>\n"
     "</Settings>",
-    settings_wifi.SSID        ? settings_wifi.SSID        : "",
-    settings_wifi.Password    ? settings_wifi.Password    : "",
-    settings_mqtt.Host        ? settings_mqtt.Host        : "",
+    settings_general.SSID            ? settings_general.SSID            : "",
+    settings_general.Password        ? settings_general.Password        : "",
+    settings_general.Class_Pool_Size,
+    settings_general.Var_Pool_Size,
+    settings_mqtt.Host               ? settings_mqtt.Host               : "",
     settings_mqtt.Port,
-    settings_mqtt.Data_Topic  ? settings_mqtt.Data_Topic  : "",
-    settings_mqtt.Alert_Topic ? settings_mqtt.Alert_Topic : "",
-    settings_schema.Class_Pool_Size,
-    settings_schema.Var_Pool_Size,
+    settings_mqtt.Data_Topic         ? settings_mqtt.Data_Topic         : "",
+    settings_mqtt.Alert_Topic        ? settings_mqtt.Alert_Topic        : "",
+    settings_mqtt.Username           ? settings_mqtt.Username           : "",
+    settings_mqtt.Mqtt_Password      ? settings_mqtt.Mqtt_Password      : "",
     settings_json.Metadata    ? "true" : "false",
     settings_json.Constraints ? "true" : "false",
     settings_json.Modbus      ? "true" : "false"
@@ -198,7 +193,15 @@ void get_metadata(void)
     if (!cls || !msg) continue;
 
     addr_pool[last_idx] = key;
-    dm_set_value("meta", cls, msg, &addr_pool[last_idx], key, INVALID_INDEX);
+    {
+      variables_description_row_t meta_row;
+      meta_row.Class         = (char*)"meta";
+      meta_row.Name          = (char*)msg;
+      meta_row.Type          = (char*)cls;
+      meta_row.Value         = key;
+      meta_row.constraint_id = -1;
+      dm_set_value(&meta_row, &addr_pool[last_idx]);
+    }
     last_idx++;
   }
 
@@ -215,14 +218,8 @@ void get_metadata(void)
 
 void acms_web_init(void)
 {
-  if (!SPIFFS.begin(true)) {   /* 'true' formats on first boot — can block several seconds */
-    Serial.println("SPIFFS mount failed");
-  }
-  yield();   /* let WiFi/lwIP tasks run after potentially long SPIFFS format */
-
-  provision_spiffs_xml();   /* write Metadata.xml + Variables.xml from firmware */
-  yield();
-
+  /* SPIFFS is already mounted and XMLs are provisioned in setup() before
+   * wifi_manager_init(), so nothing to do here except register routes. */
   server.on("/",       HTTP_GET,  handle_root);
   server.on("/test",   HTTP_GET,  handle_test);
   server.on("/reboot", HTTP_POST, handle_reboot);
@@ -300,12 +297,25 @@ void acms_system_init(const char *login_user, const char *login_pass)
   Serial.println();
 
   /* ---------------- Register sensor variables (ONCE) ---------------- */
-  dm_set_value("Sensor", "Temp",     "float", &temperature, temperature, INVALID_INDEX);
-  dm_set_value("Sensor", "Pressure", "float", &pressure,    pressure,    INVALID_INDEX);
-  dm_set_value("Sensor", "Humidity", "float", &humidity,    humidity,    INVALID_INDEX);
+  {
+    variables_description_row_t row;
+    row.constraint_id = -1;
 
-  dm_set_value("Power", "Status",  "bool",  &online,  online,   INVALID_INDEX);
-  dm_set_value("Power", "Voltage", "float", &voltage, voltage,  INVALID_INDEX);
+    row.Class = (char*)"Sensor"; row.Name = (char*)"Temp";     row.Type = (char*)"float"; row.Value = temperature;
+    dm_set_value(&row, &temperature);
+
+    row.Class = (char*)"Sensor"; row.Name = (char*)"Pressure"; row.Type = (char*)"float"; row.Value = pressure;
+    dm_set_value(&row, &pressure);
+
+    row.Class = (char*)"Sensor"; row.Name = (char*)"Humidity"; row.Type = (char*)"float"; row.Value = humidity;
+    dm_set_value(&row, &humidity);
+
+    row.Class = (char*)"Power"; row.Name = (char*)"Status";  row.Type = (char*)"bool";  row.Value = online;
+    dm_set_value(&row, &online);
+
+    row.Class = (char*)"Power"; row.Name = (char*)"Voltage"; row.Type = (char*)"float"; row.Value = voltage;
+    dm_set_value(&row, &voltage);
+  }
   sync_all();
 
   /* Cache class indices for use in loop */

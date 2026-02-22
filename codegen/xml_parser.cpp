@@ -5,6 +5,7 @@
 
 #include "schema.h"
 #include <SPIFFS.h>
+#include <Preferences.h>
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
@@ -14,10 +15,11 @@ metadata_table_t metadata_table = { .count = 0, .version = 0 };
 variables_description_table_t variables_description_table = { .count = 0, .version = 0 };
 variables_constraints_table_t variables_constraints_table = { .count = 0, .version = 0 };
 variables_modbus_table_t variables_modbus_table = { .count = 0, .version = 0 };
-settings_wifi_t settings_wifi = { NULL, NULL };
-settings_mqtt_t settings_mqtt = { NULL, 0, NULL, NULL };
-settings_schema_t settings_schema = { 0, 0 };
+settings_general_t settings_general = { NULL, NULL, 0, 0 };
+settings_mqtt_t settings_mqtt = { NULL, 0, NULL, NULL, NULL, NULL };
 settings_json_t settings_json = { false, false, false };
+uint16_t increment_loop_pool[MAX_VARIABLES_CONSTRAINTS_ROWS];
+uint16_t increment_loop_count = 0;
 
 /* ── extract value between <tag>…</tag> or detect <tag/> ── */
 static bool extract_tag(const char *xml, const char *tag, char *buf, int buflen) {
@@ -88,14 +90,20 @@ void free_metadata_table(metadata_table_t *tbl) {
   tbl->count = 0;
 }
 
-/* ── load Metadata from SPIFFS into metadata_table ── */
+/* ── load Metadata from SPIFFS; falls back to embedded default if absent ── */
 int load_metadata_from_spiffs(void) {
   free_metadata_table(&metadata_table);
   File f = SPIFFS.open("/Metadata.xml", "r");
-  if (!f) return 0;
-  String content = f.readString();
-  f.close();
-  int n = parse_metadata_xml(content.c_str(), &metadata_table);
+  const char *_src;
+  String _content;
+  if (f) {
+    _content = f.readString();
+    f.close();
+    _src = _content.c_str();
+  } else {
+    _src = METADATA_XML_DEFAULT;
+  }
+  int n = parse_metadata_xml(_src, &metadata_table);
   metadata_table.version++;
   return n;
 }
@@ -175,6 +183,9 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
       constraints_tbl->rows[constraints_count].Increment = _t_Increment;
       constraints_tbl->rows[constraints_count].value_ptr = &description_tbl->rows[description_count].Value;
       description_tbl->rows[description_count].constraint_id = constraints_count;
+      if (_t_Increment != -9999.0f && _t_Increment != 0.0f) {
+        increment_loop_pool[increment_loop_count++] = constraints_count;
+      }
       constraints_count++;
     } else {
       description_tbl->rows[description_count].constraint_id = -1;
@@ -253,7 +264,7 @@ int load_variables_from_spiffs(void) {
 }
 
 
-/* ── parse Settings XML — one subcategory per row ── */
+/* ── parse Settings XML — one category per row ── */
 static void parse_settings_xml(const char *xml) {
   const char *pos = xml;
   char buf[256];
@@ -263,14 +274,18 @@ static void parse_settings_xml(const char *xml) {
     const char *row_end = strstr(row_start, "</row>");
     if (!row_end) break;
 
-    /* ── wifi ── */
-    if (strstr(row_start, "<wifi>")) {
+    /* ── general ── */
+    if (strstr(row_start, "<general>")) {
       extract_tag(row_start, "SSID", buf, sizeof(buf));
-      if (settings_wifi.SSID) { free(settings_wifi.SSID); settings_wifi.SSID = NULL; }
-      if (buf[0]) settings_wifi.SSID = strdup(buf);
+      if (settings_general.SSID) { free(settings_general.SSID); settings_general.SSID = NULL; }
+      if (buf[0]) settings_general.SSID = strdup(buf);
       extract_tag(row_start, "Password", buf, sizeof(buf));
-      if (settings_wifi.Password) { free(settings_wifi.Password); settings_wifi.Password = NULL; }
-      if (buf[0]) settings_wifi.Password = strdup(buf);
+      if (settings_general.Password) { free(settings_general.Password); settings_general.Password = NULL; }
+      if (buf[0]) settings_general.Password = strdup(buf);
+      extract_tag(row_start, "Class_Pool_Size", buf, sizeof(buf));
+      settings_general.Class_Pool_Size = buf[0] ? (int32_t)strtol(buf, NULL, 10) : 0;
+      extract_tag(row_start, "Var_Pool_Size", buf, sizeof(buf));
+      settings_general.Var_Pool_Size = buf[0] ? (int32_t)strtol(buf, NULL, 10) : 0;
     }
 
     /* ── mqtt ── */
@@ -286,14 +301,12 @@ static void parse_settings_xml(const char *xml) {
       extract_tag(row_start, "Alert_Topic", buf, sizeof(buf));
       if (settings_mqtt.Alert_Topic) { free(settings_mqtt.Alert_Topic); settings_mqtt.Alert_Topic = NULL; }
       if (buf[0]) settings_mqtt.Alert_Topic = strdup(buf);
-    }
-
-    /* ── schema ── */
-    else if (strstr(row_start, "<schema>")) {
-      extract_tag(row_start, "Class_Pool_Size", buf, sizeof(buf));
-      settings_schema.Class_Pool_Size = buf[0] ? (int32_t)strtol(buf, NULL, 10) : 0;
-      extract_tag(row_start, "Var_Pool_Size", buf, sizeof(buf));
-      settings_schema.Var_Pool_Size = buf[0] ? (int32_t)strtol(buf, NULL, 10) : 0;
+      extract_tag(row_start, "Username", buf, sizeof(buf));
+      if (settings_mqtt.Username) { free(settings_mqtt.Username); settings_mqtt.Username = NULL; }
+      if (buf[0]) settings_mqtt.Username = strdup(buf);
+      extract_tag(row_start, "Mqtt_Password", buf, sizeof(buf));
+      if (settings_mqtt.Mqtt_Password) { free(settings_mqtt.Mqtt_Password); settings_mqtt.Mqtt_Password = NULL; }
+      if (buf[0]) settings_mqtt.Mqtt_Password = strdup(buf);
     }
 
     /* ── json ── */
@@ -310,8 +323,23 @@ static void parse_settings_xml(const char *xml) {
   }
 }
 
-/* ── load Settings from SPIFFS — silently skips if file absent ── */
+/* ── load Settings: seed defaults → NVS WiFi → SPIFFS override ── */
 int load_settings_from_spiffs(void) {
+  parse_settings_xml(SETTINGS_XML_DEFAULT);
+  /* WiFi credentials from NVS (written by captive portal). */
+  {
+    Preferences _p;
+    _p.begin("acms_wifi", true);
+    String _ssid = _p.getString("ssid", "");
+    String _pass = _p.getString("pass", "");
+    _p.end();
+    if (_ssid.length() > 0) {
+      if (settings_general.SSID) { free(settings_general.SSID); settings_general.SSID = NULL; }
+      settings_general.SSID = strdup(_ssid.c_str());
+      if (settings_general.Password) { free(settings_general.Password); settings_general.Password = NULL; }
+      if (_pass.length() > 0) settings_general.Password = strdup(_pass.c_str());
+    }
+  }
   File f = SPIFFS.open("/Settings.xml", "r");
   if (!f) return 0;
   String content = f.readString();
@@ -321,28 +349,8 @@ int load_settings_from_spiffs(void) {
 }
 
 
-/* ═══════ SPIFFS provisioning — writes embedded XML defaults ═══════ */
-/* Call once in setup() after SPIFFS.begin() / acms_web_init(). */
-void provision_spiffs_xml(void) {
-  /* always overwrite — developer-managed tables */
-  const struct { const char *path; const char *data; } always[2] = {
-    { "/Metadata.xml", METADATA_XML_DEFAULT },
-    { "/Settings.xml", SETTINGS_XML_DEFAULT },
-  };
-  for (int i = 0; i < 2; i++) {
-    File f = SPIFFS.open(always[i].path, "w");
-    if (f) { f.print(always[i].data); f.close(); }
-    yield();
-  }
-  /* only write if absent — user-managed tables */
-  const struct { const char *path; const char *data; } once[1] = {
-    { "/Variables.xml", VARIABLES_XML_DEFAULT },
-  };
-  for (int i = 0; i < 1; i++) {
-    if (!SPIFFS.exists(once[i].path)) {
-      File f = SPIFFS.open(once[i].path, "w");
-      if (f) { f.print(once[i].data); f.close(); }
-    }
-    yield();
-  }
-}
+/* provision_spiffs_xml — intentional no-op.
+ * XMLs are created in SPIFFS only by the web UI on first Submit.
+ * Load functions fall back to xml_defaults.h when no SPIFFS file exists.
+ * Captive portal WiFi credentials are stored in NVS, not SPIFFS. */
+void provision_spiffs_xml(void) {}

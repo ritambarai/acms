@@ -41,9 +41,8 @@ static const char VARIABLES_XML_DEFAULT[] = R"XMLRAW(
 
 static const char SETTINGS_XML_DEFAULT[] = R"XMLRAW(
 <Settings>
-<row><wifi><SSID></SSID><Password></Password></wifi></row>
-<row><mqtt><Host>mqtt-server.ddns.net</Host><Port>1883</Port><Data_Topic>ACMS_Rey/01/</Data_Topic><Alert_Topic></Alert_Topic></mqtt></row>
-<row><schema><Class_Pool_Size>32</Class_Pool_Size><Var_Pool_Size>128</Var_Pool_Size></schema></row>
+<row><general><SSID></SSID><Password></Password><Class_Pool_Size>32</Class_Pool_Size><Var_Pool_Size>128</Var_Pool_Size></general></row>
+<row><mqtt><Host>mqtt-server.ddns.net</Host><Port>1883</Port><Data_Topic>ACMS_Rey/01/</Data_Topic><Alert_Topic></Alert_Topic><Username></Username><Mqtt_Password></Mqtt_Password></mqtt></row>
 <row><json><Metadata>false</Metadata><Constraints>false</Constraints><Modbus>false</Modbus></json></row>
 </Settings>
 )XMLRAW";

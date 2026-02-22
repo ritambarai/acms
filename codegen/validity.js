@@ -145,7 +145,7 @@ function validateValidityField(input) {
     var typeVal = typeInput ? typeInput.value.trim().toLowerCase() : "";
     var half = input.closest(".half");
     var insertBtn = half ? half.querySelector(".insert-btn") : null;
-    if (typeVal === "type" || typeVal === "units" || typeVal === "verification") {
+    if (typeVal === "type" || typeVal === "unit" || typeVal === "verification") {
       input.style.borderColor = "";
       input.classList.remove("invalid");
       errSpan.textContent = "";
@@ -235,13 +235,13 @@ function validateValidityField(input) {
       return false;
     }
 
-    /* ── Step 6: resolve unit message from Metadata (use classKey class only) ── */
+    /* ── Step 6: resolve unit message from Metadata (use nameKey as Metadata class) ── */
     var uKeyVal = (nameDict[unitRowKey]["Value"] !== null && nameDict[unitRowKey]["Value"] !== undefined)
       ? String(nameDict[unitRowKey]["Value"]) : "";
     /* normalize float key: "1.0" → "1" so it matches Metadata Key column */
     var uKeyNorm = (uKeyVal !== "" && isFinite(uKeyVal)) ? String(parseFloat(uKeyVal)) : uKeyVal;
     var uClassKey = Object.keys(dict).find(function(k) {
-      return k.toLowerCase() === classKey.toLowerCase();
+      return k.toLowerCase() === nameKey.toLowerCase();
     });
     var uMsg = (uClassKey && dict[uClassKey].hasOwnProperty(uKeyNorm))
       ? dict[uClassKey][uKeyNorm] : null;
