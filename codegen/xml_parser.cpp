@@ -3,7 +3,10 @@
  * Parses XML from SPIFFS and populates row structs.
  */
 
+extern "C" {
 #include "schema.h"
+#include "data_manager.h"
+}
 #include <SPIFFS.h>
 #include <Preferences.h>
 #include <string.h>
@@ -50,6 +53,10 @@ static int parse_metadata_xml(const char *xml, metadata_table_t *tbl) {
   const char *pos = xml;
   char buf[256];
 
+  variables_description_row_t row;
+  row.Class         = (char *)"metaData";
+  row.constraint_id = -1;
+
   while (count < MAX_METADATA_ROWS) {
     const char *row_start = strstr(pos, "<row>");
     if (!row_start) break;
@@ -74,10 +81,18 @@ static int parse_metadata_xml(const char *xml, metadata_table_t *tbl) {
     }
     tbl->rows[count].Class = buf[0] ? strdup(buf) : NULL;
 
+    row.Name  = tbl->rows[count].Class;
+    row.Type  = tbl->rows[count].Message;
+    row.Value = tbl->rows[count].Key;
+    dm_set_value(&row, &tbl->rows[count].Key);
+
+    Serial.printf("[%d] Key=%.2f  Message=%s  Class=%s\n", count, tbl->rows[count].Key, tbl->rows[count].Message ? tbl->rows[count].Message : "(null)", tbl->rows[count].Class ? tbl->rows[count].Class : "(null)");
+
     count++;
     pos = row_end + 6;
   }
   tbl->count = count;
+  Serial.printf("[Metadata] total rows: %d\n", count);
   return count;
 }
 
@@ -90,21 +105,22 @@ void free_metadata_table(metadata_table_t *tbl) {
   tbl->count = 0;
 }
 
-/* ── load Metadata from SPIFFS; falls back to embedded default if absent ── */
+/* ── load Metadata from SPIFFS; falls back to embedded default if absent or empty ── */
 int load_metadata_from_spiffs(void) {
   free_metadata_table(&metadata_table);
-  File f = SPIFFS.open("/Metadata.xml", "r");
-  const char *_src;
   String _content;
-  if (f) {
-    _content = f.readString();
-    f.close();
-    _src = _content.c_str();
-  } else {
-    _src = METADATA_XML_DEFAULT;
+  File f = SPIFFS.open("/Metadata.xml", "r");
+  if (f) { _content = f.readString(); f.close(); }
+  int n = (_content.length() > 0)
+          ? parse_metadata_xml(_content.c_str(), &metadata_table)
+          : 0;
+  if (n == 0) {
+    Serial.println("[XML] Metadata.xml empty/missing -- using default");
+    n = parse_metadata_xml(METADATA_XML_DEFAULT, &metadata_table);
   }
-  int n = parse_metadata_xml(_src, &metadata_table);
   metadata_table.version++;
+  uint16_t meta_idx = dm_class_map_find("metaData");
+  if (meta_idx != INVALID_INDEX) sync_class(meta_idx);
   return n;
 }
 
@@ -229,6 +245,11 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
     } else {
     }
 
+    dm_set_value(&description_tbl->rows[description_count],
+                 &description_tbl->rows[description_count].Value);
+
+    Serial.printf("[%d] Class=%s  Name=%s  Type=%s  Value=%.4f  constraint_id=%d\n", description_count, description_tbl->rows[description_count].Class ? description_tbl->rows[description_count].Class : "(null)", description_tbl->rows[description_count].Name ? description_tbl->rows[description_count].Name : "(null)", description_tbl->rows[description_count].Type ? description_tbl->rows[description_count].Type : "(null)", description_tbl->rows[description_count].Value, description_tbl->rows[description_count].constraint_id);
+
     description_count++;
     pos = row_end + 6;
   }
@@ -236,6 +257,7 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
   description_tbl->count = description_count;
   constraints_tbl->count = constraints_count;
   modbus_tbl->count = modbus_count;
+  Serial.printf("[Variables] total rows: %d  constraints: %d  modbus: %d\n", description_count, constraints_count, modbus_count);
   return description_count;
 }
 
@@ -249,17 +271,23 @@ void free_variables_description_table(variables_description_table_t *tbl) {
   tbl->count = 0;
 }
 
-/* ── load Variables from SPIFFS into all subcat tables ── */
+/* ── load Variables from SPIFFS into all subcat tables; falls back to embedded default if absent or empty ── */
 int load_variables_from_spiffs(void) {
   free_variables_description_table(&variables_description_table);
+  String content;
   File f = SPIFFS.open("/Variables.xml", "r");
-  if (!f) return 0;
-  String content = f.readString();
-  f.close();
-  int n = parse_variables_xml(content.c_str(), &variables_description_table, &variables_constraints_table, &variables_modbus_table);
+  if (f) { content = f.readString(); f.close(); }
+  int n = (content.length() > 0)
+          ? parse_variables_xml(content.c_str(), &variables_description_table, &variables_constraints_table, &variables_modbus_table)
+          : 0;
+  if (n == 0) {
+    Serial.println("[XML] Variables.xml empty/missing -- using default");
+    n = parse_variables_xml(VARIABLES_XML_DEFAULT, &variables_description_table, &variables_constraints_table, &variables_modbus_table);
+  }
   variables_description_table.version++;
   variables_constraints_table.version++;
   variables_modbus_table.version++;
+  sync_all();
   return n;
 }
 
@@ -329,7 +357,7 @@ int load_settings_from_spiffs(void) {
   /* WiFi credentials from NVS (written by captive portal). */
   {
     Preferences _p;
-    _p.begin("acms_wifi", true);
+    _p.begin("wifi", true);
     String _ssid = _p.getString("ssid", "");
     String _pass = _p.getString("pass", "");
     _p.end();

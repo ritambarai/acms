@@ -18,7 +18,6 @@
 #include <ESPmDNS.h>
 #include <DNSServer.h>
 #include <WebServer.h>
-#include <SPIFFS.h>
 #include <Preferences.h>
 #include <PubSubClient.h>
 
@@ -69,61 +68,31 @@ static const char AP_PAGE_BOT[] PROGMEM = R"HTML(      </select>
 </html>
 )HTML";
 
-/* ── Write complete Settings.xml with new WiFi credentials ──── */
-static void save_wifi_to_spiffs(const char *ssid, const char *pass)
+/* ── Save WiFi credentials to NVS (read back at boot before Settings.xml) ── */
+void wifi_credentials_save(const char *ssid, const char *pass)
 {
-    /* Update in-memory general struct */
-    if (settings_general.SSID)     { free(settings_general.SSID);     settings_general.SSID     = NULL; }
-    if (settings_general.Password) { free(settings_general.Password); settings_general.Password = NULL; }
-    if (ssid && ssid[0]) settings_general.SSID     = strdup(ssid);
-    if (pass)            settings_general.Password = strdup(pass);
-
-    /* Write the full Settings.xml in the canonical 3-row format.
-     * Non-WiFi fields use whatever is already in memory (loaded at boot). */
-    char buf[1024];
-    snprintf(buf, sizeof(buf),
-        "<Settings>\n"
-        "<row><general>"
-          "<SSID>%s</SSID><Password>%s</Password>"
-          "<Class_Pool_Size>%d</Class_Pool_Size><Var_Pool_Size>%d</Var_Pool_Size>"
-        "</general></row>\n"
-        "<row><mqtt>"
-          "<Host>%s</Host><Port>%d</Port>"
-          "<Data_Topic>%s</Data_Topic><Alert_Topic>%s</Alert_Topic>"
-          "<Username>%s</Username><Mqtt_Password>%s</Mqtt_Password>"
-        "</mqtt></row>\n"
-        "<row><json>"
-          "<Metadata>%s</Metadata><Constraints>%s</Constraints><Modbus>%s</Modbus>"
-        "</json></row>\n"
-        "</Settings>",
-        settings_general.SSID            ? settings_general.SSID            : "",
-        settings_general.Password        ? settings_general.Password        : "",
-        settings_general.Class_Pool_Size,
-        settings_general.Var_Pool_Size,
-        settings_mqtt.Host               ? settings_mqtt.Host               : "",
-        settings_mqtt.Port,
-        settings_mqtt.Data_Topic         ? settings_mqtt.Data_Topic         : "",
-        settings_mqtt.Alert_Topic        ? settings_mqtt.Alert_Topic        : "",
-        settings_mqtt.Username           ? settings_mqtt.Username           : "",
-        settings_mqtt.Mqtt_Password      ? settings_mqtt.Mqtt_Password      : "",
-        settings_json.Metadata    ? "true" : "false",
-        settings_json.Constraints ? "true" : "false",
-        settings_json.Modbus      ? "true" : "false"
-    );
-
-    File wf = SPIFFS.open("/Settings.xml", "w");
-    if (!wf) { Serial.println("[AP] SPIFFS write failed"); return; }
-    wf.print(buf);
-    wf.close();
-    Serial.println("[AP] Settings.xml updated");
+    Preferences prefs;
+    prefs.begin("wifi", false);   /* read-write */
+    prefs.putString("ssid", ssid ? ssid : "");
+    prefs.putString("pass", pass ? pass : "");
+    prefs.end();
+    Serial.printf("[WiFi] Credentials saved to NVS  ssid=%s\n", ssid ? ssid : "");
 }
 
 /* ── Blocking AP captive portal — never returns, reboots on save ─ */
 static void start_ap_portal(void)
 {
-    Serial.println("[AP] Starting WiFi setup portal  SSID: ACMS Portal(acms-portal.local)");
+    Serial.println("[AP] Starting WiFi setup portal  SSID: ACMS-Setup");
+    /* Cycle through WIFI_OFF so the stack fully tears down its internal tasks
+     * and they deregister from the TWDT before we restart in AP+STA mode.
+     * Without this, old task handles trigger "task not found" WDT errors. */
+    WiFi.disconnect(false);    /* disconnect without stopping the stack */
+    WiFi.mode(WIFI_OFF);       /* full stop — internal tasks clean up */
+    delay(500);                /* wait for TWDT deregistrations to complete */
     WiFi.mode(WIFI_AP_STA);   /* STA radio must stay on for scanNetworks() to work */
-    WiFi.softAP("ACMS Portal(acms-portal.local)");
+    delay(200);
+    WiFi.softAP("ACMS-Setup(192.168.4.1)");
+    delay(500);                /* give AP time to come up before reading IP */
     IPAddress apIP = WiFi.softAPIP();
 
     dns_server.setErrorReplyCode(DNSReplyCode::NoError);
@@ -154,7 +123,7 @@ static void start_ap_portal(void)
     apServer.on("/save", HTTP_POST, [&apServer, &apIP]() {
         String newSsid = apServer.arg("ssid");
         String newPass = apServer.arg("password");
-        save_wifi_to_spiffs(newSsid.c_str(), newPass.c_str());
+        wifi_credentials_save(newSsid.c_str(), newPass.c_str());
         apServer.send(200, "text/html",
             "<html><body style='font-family:sans-serif;text-align:center;margin-top:80px'>"
             "<h2>Saved. Rebooting&hellip;</h2></body></html>");
@@ -193,7 +162,7 @@ bool wifi_manager_init(const char *ssid, const char *password)
     Serial.print("[WiFi] Connecting to ");
     Serial.print(ssid);
 
-    const uint32_t timeout_ms = 15000;
+    const uint32_t timeout_ms = 10000;
     uint32_t start = millis();
 
     while (WiFi.status() != WL_CONNECTED) {
@@ -206,7 +175,6 @@ bool wifi_manager_init(const char *ssid, const char *password)
         Serial.print(".");
     }
 
-    Serial.println();
     Serial.print("[WiFi] Connected  IP: ");
     Serial.println(WiFi.localIP());
 
@@ -227,6 +195,8 @@ bool wifi_manager_init(const char *ssid, const char *password)
     dns_running = true;
     Serial.println("[DNS]  http://" WIFI_PORTAL_DOMAIN
                    "  -> " + WiFi.localIP().toString());
+
+    mqtt_manager_connect();
 
     return true;
 }

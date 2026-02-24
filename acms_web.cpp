@@ -177,6 +177,8 @@ static void handle_post_xml() {
     load_metadata_from_spiffs();
   } else if (uri == "/Settings.xml") {
     load_settings_from_spiffs();
+    /* Mirror WiFi credentials to NVS so they survive SPIFFS formats */
+    wifi_credentials_save(settings_general.SSID, settings_general.Password);
   }
 
   server.send(200, "text/plain", "OK");
@@ -188,35 +190,8 @@ static void handle_post_xml() {
 
 void get_metadata(void)
 {
+  /* dm_set_value + sync are handled inside load_metadata_from_spiffs → parse_metadata_xml */
   load_metadata_from_spiffs();
-
-  for (int i = 0; i < metadata_table.count; i++) {
-    if (last_idx >= MAX_VAR_POOL) break;
-
-    const char *cls = metadata_table.rows[i].Class;
-    const char *msg = metadata_table.rows[i].Message;
-    float       key = metadata_table.rows[i].Key;
-
-    if (!cls || !msg) continue;
-
-    addr_pool[last_idx] = key;
-    {
-      variables_description_row_t meta_row;
-      meta_row.Class         = (char*)"meta";
-      meta_row.Name          = (char*)msg;
-      meta_row.Type          = (char*)cls;
-      meta_row.Value         = key;
-      meta_row.constraint_id = -1;
-      dm_set_value(&meta_row, &addr_pool[last_idx]);
-    }
-    last_idx++;
-  }
-
-  /* sync the "meta" class to JSON + send */
-  uint16_t meta_idx = dm_class_map_find("meta");
-  if (meta_idx != INVALID_INDEX) {
-    sync_class(meta_idx);
-  }
 }
 
 /* =========================================================
