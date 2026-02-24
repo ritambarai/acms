@@ -949,7 +949,8 @@ def _gen_field_extract(lines, name, typ, prefix, PREFIX, tbl_var, idx="count"):
 
 
 def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=None,
-                     settings_subcats=None, settings_fields=None):
+                     settings_subcats=None, settings_fields=None,
+                     dm_flat_config=None, dm_subcat_tables=None):
     """Generate xml_parser.c — SPIFFS XML parsing and struct population."""
     if subcategories is None:
         subcategories = {}
@@ -957,13 +958,20 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
         xml_map = {}
     if always_overwrite is None:
         always_overwrite = set()
+    if dm_flat_config is None:
+        dm_flat_config = {}
+    if dm_subcat_tables is None:
+        dm_subcat_tables = set()
     lines = []
     lines.append("/*")
     lines.append(" * xml_parser.c — generated from XSD")
     lines.append(" * Parses XML from SPIFFS and populates row structs.")
     lines.append(" */")
     lines.append("")
+    lines.append('extern "C" {')
     lines.append('#include "schema.h"')
+    lines.append('#include "data_manager.h"')
+    lines.append('}')
     lines.append("#include <SPIFFS.h>")
     lines.append("#include <Preferences.h>")
     lines.append("#include <string.h>")
@@ -1159,6 +1167,32 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                         lines.append("    }")
                         lines.append("")
 
+                if t in dm_subcat_tables and src_sc:
+                    sv = f"{src_sl}_tbl"
+                    si = f"{src_sl}_count"
+                    lines.append(f"    dm_set_value(&{sv}->rows[{si}],")
+                    lines.append(f"                 &{sv}->rows[{si}].Value);")
+                    lines.append("")
+                    sc_fields_typed = [(fn, field_map[fn]) for fn in subcats[src_sc]]
+                    printf_fmts = []
+                    printf_args_list = []
+                    for fn, ftyp in sc_fields_typed:
+                        ci = c_ident(fn)
+                        if ftyp in C_NUMERIC_TYPES:
+                            printf_fmts.append(f"{fn}=%.4f")
+                            printf_args_list.append(f"{sv}->rows[{si}].{ci}")
+                        elif ftyp in C_INT_TYPES:
+                            printf_fmts.append(f"{fn}=%d")
+                            printf_args_list.append(f"(int){sv}->rows[{si}].{ci}")
+                        else:
+                            printf_fmts.append(f"{fn}=%s")
+                            printf_args_list.append(f'{sv}->rows[{si}].{ci} ? {sv}->rows[{si}].{ci} : "(null)"')
+                    printf_fmts.append("constraint_id=%d")
+                    printf_args_list.append(f"{sv}->rows[{si}].constraint_id")
+                    fmt_str = "  ".join(printf_fmts)
+                    all_args = ", ".join([si] + printf_args_list)
+                    lines.append(f'    Serial.printf("[%d] {fmt_str}\\n", {all_args});')
+                    lines.append("")
                 lines.append(f"    {src_sl}_count++;")
                 lines.append("    pos = row_end + 6;")
                 lines.append("  }")
@@ -1167,6 +1201,10 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                 for osc in optional_scs:
                     osl = osc.lower()
                     lines.append(f"  {osl}_tbl->count = {osl}_count;")
+                if t in dm_subcat_tables and optional_scs:
+                    ocount_fmt = "  ".join(f"{osc.lower()}: %d" for osc in optional_scs)
+                    ocount_vars = ", ".join(f"{osc.lower()}_count" for osc in optional_scs)
+                    lines.append(f'  Serial.printf("[{t}] total rows: %d  {ocount_fmt}\\n", {src_sl}_count, {ocount_vars});')
                 lines.append(f"  return {src_sl}_count;")
 
             else:
@@ -1219,7 +1257,8 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                     lines.append("")
 
             # ── SPIFFS loader ──
-            lines.append(f"/* ── load {t} from SPIFFS into all subcat tables ── */")
+            args = ", ".join(f"&{tl}_{sc.lower()}_table" for sc in subcat_names)
+            lines.append(f"/* ── load {t} from SPIFFS into all subcat tables; falls back to embedded default if absent or empty ── */")
             lines.append(f"int load_{tl}_from_spiffs(void) {{")
 
             # Free strings in all subcats
@@ -1231,16 +1270,29 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                 if string_fields:
                     lines.append(f"  free_{prefix}_table(&{prefix}_table);")
 
-            lines.append(f'  File f = SPIFFS.open("/{t}.xml", "r");')
-            lines.append("  if (!f) return 0;")
-            lines.append("  String content = f.readString();")
-            lines.append("  f.close();")
+            if t in xml_map:
+                lines.append(f"  String content;")
+                lines.append(f'  File f = SPIFFS.open("/{t}.xml", "r");')
+                lines.append(f"  if (f) {{ content = f.readString(); f.close(); }}")
+                lines.append(f"  int n = (content.length() > 0)")
+                lines.append(f"          ? parse_{tl}_xml(content.c_str(), {args})")
+                lines.append(f"          : 0;")
+                lines.append(f"  if (n == 0) {{")
+                lines.append(f'    Serial.println("[XML] {t}.xml empty/missing -- using default");')
+                lines.append(f"    n = parse_{tl}_xml({t.upper()}_XML_DEFAULT, {args});")
+                lines.append(f"  }}")
+            else:
+                lines.append(f'  File f = SPIFFS.open("/{t}.xml", "r");')
+                lines.append("  if (!f) return 0;")
+                lines.append("  String content = f.readString();")
+                lines.append("  f.close();")
+                lines.append(f"  int n = parse_{tl}_xml(content.c_str(), {args});")
 
-            args = ", ".join(f"&{tl}_{sc.lower()}_table" for sc in subcat_names)
-            lines.append(f"  int n = parse_{tl}_xml(content.c_str(), {args});")
             for sc_name in subcat_names:
                 sl = sc_name.lower()
                 lines.append(f"  {tl}_{sl}_table.version++;")
+            if t in dm_subcat_tables:
+                lines.append("  sync_all();")
             lines.append("  return n;")
             lines.append("}")
             lines.append("")
@@ -1254,6 +1306,12 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
             lines.append("  const char *pos = xml;")
             lines.append("  char buf[256];")
             lines.append("")
+            if t in dm_flat_config:
+                cfg = dm_flat_config[t]
+                lines.append("  variables_description_row_t row;")
+                lines.append(f'  row.Class         = (char *)"{cfg["class"]}";')
+                lines.append("  row.constraint_id = -1;")
+                lines.append("")
             lines.append(f"  while (count < MAX_{tu}_ROWS) {{")
             lines.append('    const char *row_start = strstr(pos, "<row>");')
             lines.append("    if (!row_start) break;")
@@ -1264,10 +1322,39 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
             for name, typ in fields:
                 _gen_field_extract(lines, name, typ, tl, tu, "tbl")
 
+            if t in dm_flat_config:
+                cfg = dm_flat_config[t]
+                nf = c_ident(cfg["name_field"])
+                tf = c_ident(cfg["type_field"])
+                vf = c_ident(cfg["value_field"])
+                lines.append(f"    row.Name  = tbl->rows[count].{nf};")
+                lines.append(f"    row.Type  = tbl->rows[count].{tf};")
+                lines.append(f"    row.Value = tbl->rows[count].{vf};")
+                lines.append(f"    dm_set_value(&row, &tbl->rows[count].{vf});")
+                lines.append("")
+                printf_fmts = []
+                printf_args_list = []
+                for fname, ftyp in fields:
+                    ci = c_ident(fname)
+                    if ftyp in C_NUMERIC_TYPES:
+                        printf_fmts.append(f"{fname}=%.2f")
+                        printf_args_list.append(f"tbl->rows[count].{ci}")
+                    elif ftyp in C_INT_TYPES:
+                        printf_fmts.append(f"{fname}=%d")
+                        printf_args_list.append(f"(int)tbl->rows[count].{ci}")
+                    else:
+                        printf_fmts.append(f"{fname}=%s")
+                        printf_args_list.append(f'tbl->rows[count].{ci} ? tbl->rows[count].{ci} : "(null)"')
+                fmt_str = "  ".join(printf_fmts)
+                all_args = ", ".join(["count"] + printf_args_list)
+                lines.append(f'    Serial.printf("[%d] {fmt_str}\\n", {all_args});')
+                lines.append("")
             lines.append("    count++;")
             lines.append("    pos = row_end + 6;")
             lines.append("  }")
             lines.append("  tbl->count = count;")
+            if t in dm_flat_config:
+                lines.append(f'  Serial.printf("[{t}] total rows: %d\\n", count);')
             lines.append("  return count;")
             lines.append("}")
             lines.append("")
@@ -1284,24 +1371,41 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                 lines.append("}")
                 lines.append("")
 
-            lines.append(f"/* ── load {t} from SPIFFS; falls back to embedded default if absent ── */")
+            lines.append(f"/* ── load {t} from SPIFFS; falls back to embedded default if absent or empty ── */")
             lines.append(f"int load_{tl}_from_spiffs(void) {{")
 
             if string_fields:
                 lines.append(f"  free_{tl}_table(&{tl}_table);")
 
-            lines.append(f'  File f = SPIFFS.open("/{t}.xml", "r");')
-            lines.append(f"  const char *_src;")
-            lines.append(f"  String _content;")
-            lines.append(f"  if (f) {{")
-            lines.append(f"    _content = f.readString();")
-            lines.append(f"    f.close();")
-            lines.append(f"    _src = _content.c_str();")
-            lines.append(f"  }} else {{")
-            lines.append(f"    _src = {t.upper()}_XML_DEFAULT;")
-            lines.append(f"  }}")
-            lines.append(f"  int n = parse_{tl}_xml(_src, &{tl}_table);")
+            if t in xml_map:
+                lines.append(f"  String _content;")
+                lines.append(f'  File f = SPIFFS.open("/{t}.xml", "r");')
+                lines.append(f"  if (f) {{ _content = f.readString(); f.close(); }}")
+                lines.append(f"  int n = (_content.length() > 0)")
+                lines.append(f"          ? parse_{tl}_xml(_content.c_str(), &{tl}_table)")
+                lines.append(f"          : 0;")
+                lines.append(f"  if (n == 0) {{")
+                lines.append(f'    Serial.println("[XML] {t}.xml empty/missing -- using default");')
+                lines.append(f"    n = parse_{tl}_xml({t.upper()}_XML_DEFAULT, &{tl}_table);")
+                lines.append(f"  }}")
+            else:
+                lines.append(f'  File f = SPIFFS.open("/{t}.xml", "r");')
+                lines.append(f"  const char *_src;")
+                lines.append(f"  String _content;")
+                lines.append(f"  if (f) {{")
+                lines.append(f"    _content = f.readString();")
+                lines.append(f"    f.close();")
+                lines.append(f"    _src = _content.c_str();")
+                lines.append(f"  }} else {{")
+                lines.append(f"    _src = {t.upper()}_XML_DEFAULT;")
+                lines.append(f"  }}")
+                lines.append(f"  int n = parse_{tl}_xml(_src, &{tl}_table);")
+
             lines.append(f"  {tl}_table.version++;")
+            if t in dm_flat_config:
+                cls_name = dm_flat_config[t]["class"]
+                lines.append(f'  uint16_t meta_idx = dm_class_map_find("{cls_name}");')
+                lines.append(f"  if (meta_idx != INVALID_INDEX) sync_class(meta_idx);")
             lines.append("  return n;")
             lines.append("}")
             lines.append("")
@@ -1399,7 +1503,7 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                 lines.append("  /* WiFi credentials from NVS (written by captive portal). */")
                 lines.append("  {")
                 lines.append('    Preferences _p;')
-                lines.append('    _p.begin("acms_wifi", true);')
+                lines.append('    _p.begin("wifi", true);')
                 lines.append('    String _ssid = _p.getString("ssid", "");')
                 lines.append('    String _pass = _p.getString("pass", "");')
                 lines.append('    _p.end();')
@@ -2334,11 +2438,23 @@ def main():
                                settings_fields=settings_fields,
                                max_rows=max_rows))
 
+    dm_flat_config = {
+        "Metadata": {
+            "class":       "metaData",
+            "name_field":  "Class",
+            "type_field":  "Message",
+            "value_field": "Key",
+        }
+    }
+    dm_subcat_tables = {"Variables"}
+
     with open("xml_parser.cpp", "w") as f:
         f.write(gen_c_xml_parser(form_tables, subcategories, xml_map,
                                  always_overwrite=set(),
                                  settings_subcats=settings_subcats,
-                                 settings_fields=settings_fields))
+                                 settings_fields=settings_fields,
+                                 dm_flat_config=dm_flat_config,
+                                 dm_subcat_tables=dm_subcat_tables))
 
     if xml_map:
         with open("xml_defaults.h", "w") as f:
