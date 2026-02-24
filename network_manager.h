@@ -28,7 +28,7 @@ extern "C" {
 #include <stdbool.h>
 
 /* Connect to WiFi, start mDNS (acms.local) and DNS server (acms.portal).
- * Blocks until connected or timeout (15 s).
+ * Blocks until connected or timeout (10 s).
  * Returns true on success, false on timeout. */
 bool wifi_manager_init(const char *ssid, const char *password);
 
@@ -43,6 +43,10 @@ bool mqtt_manager_publish(const char *topic, const char *payload, bool retain);
 
 /* Returns true if the MQTT client is currently connected. */
 bool mqtt_manager_connected(void);
+
+/* Save WiFi credentials to NVS — persists across reboots and SPIFFS formats.
+ * Call after user edits credentials in the web UI or captive portal. */
+void wifi_credentials_save(const char *ssid, const char *pass);
 
 #ifdef __cplusplus
 }

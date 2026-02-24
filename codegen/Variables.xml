@@ -4,4 +4,5 @@
 <row><Class>sensor</Class><Name>pressure</Name><Type>unit</Type><Value>1</Value><Operation_ID/><Threshold/><Fault_Code/><Increment/><Slave_ID/><Function_ID/><Start_Address/><Data_Length/></row>
 <row><Class>sensor</Class><Name>status</Name><Type>unit</Type><Value>1</Value><Operation_ID/><Threshold/><Fault_Code/><Increment/><Slave_ID/><Function_ID/><Start_Address/><Data_Length/></row>
 <row><Class>sensor</Class><Name>pressure</Name><Type>side</Type><Value>1.54</Value><Operation_ID/><Threshold/><Fault_Code/><Increment>0.01</Increment><Slave_ID/><Function_ID/><Start_Address/><Data_Length/></row>
+<row><Class>sensor</Class><Name>pressure</Name><Type>scale</Type><Value/><Operation_ID/><Threshold/><Fault_Code/><Increment/><Slave_ID>1</Slave_ID><Function_ID>1</Function_ID><Start_Address>0</Start_Address><Data_Length>8</Data_Length></row>
 </Variables>
