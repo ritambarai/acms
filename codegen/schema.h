@@ -238,21 +238,21 @@ typedef struct {
   char* Data_Topic;
   char* Alert_Topic;
   char* Username;
-  char* Mqtt_Password;
+  char* Password;
 } settings_mqtt_t;
 
 extern settings_mqtt_t settings_mqtt;
 
 
-/* ─── Settings / json ─── */
+/* ─── Settings / json includes ─── */
 
 typedef struct {
   bool Metadata;
   bool Constraints;
-  bool Modbus;
-} settings_json_t;
+  bool Type_Unit;
+} settings_json_includes_t;
 
-extern settings_json_t settings_json;
+extern settings_json_includes_t settings_json_includes;
 
 
 /* ── Runtime pool-size accessors (defaults when struct value is 0) ── */

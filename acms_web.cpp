@@ -117,9 +117,9 @@ static void handle_get_settings_xml() {
       "<Data_Topic>%s</Data_Topic><Alert_Topic>%s</Alert_Topic>"
       "<Username>%s</Username><Mqtt_Password>%s</Mqtt_Password>"
     "</mqtt></row>\n"
-    "<row><json>"
-      "<Metadata>%s</Metadata><Constraints>%s</Constraints><Modbus>%s</Modbus>"
-    "</json></row>\n"
+    "<row><json_includes>"
+      "<Metadata>%s</Metadata><Constraints>%s</Constraints><Type_Unit>%s</Type_Unit>"
+    "</json_includes></row>\n"
     "</Settings>",
     settings_general.SSID            ? settings_general.SSID            : "",
     settings_general.Password        ? settings_general.Password        : "",
@@ -131,9 +131,9 @@ static void handle_get_settings_xml() {
     settings_mqtt.Alert_Topic        ? settings_mqtt.Alert_Topic        : "",
     settings_mqtt.Username           ? settings_mqtt.Username           : "",
     settings_mqtt.Mqtt_Password      ? settings_mqtt.Mqtt_Password      : "",
-    settings_json.Metadata    ? "true" : "false",
-    settings_json.Constraints ? "true" : "false",
-    settings_json.Modbus      ? "true" : "false"
+    settings_json_includes.Metadata    ? "true" : "false",
+    settings_json_includes.Constraints ? "true" : "false",
+    settings_json_includes.Type_Unit   ? "true" : "false"
   );
 
   server.send(200, "application/xml", buf);

@@ -401,14 +401,14 @@ button {
           <span class="error-msg"></span>
         </div>
         <div class="field">
-          <label>Mqtt Password</label>
-          <input placeholder="string" data-type="string" data-name="Mqtt_Password" oninput="validateField(this); settingsChanged()">
+          <label>Password</label>
+          <input placeholder="string" data-type="string" data-name="Password" oninput="validateField(this); settingsChanged()">
           <span class="error-msg"></span>
         </div>
       </div>
     </div>
     <div class="subcat-row">
-      <span class="subcat-label">json</span>
+      <span class="subcat-label">json includes</span>
       <div class="form-grid">
         <div class="field">
           <label>Metadata</label>
@@ -421,8 +421,8 @@ button {
           <span class="error-msg"></span>
         </div>
         <div class="field">
-          <label>Modbus</label>
-          <input type="checkbox" data-type="boolean" data-name="Modbus" class="settings-checkbox" onchange="settingsChanged()">
+          <label>Type Unit</label>
+          <input type="checkbox" data-type="boolean" data-name="Type_Unit" class="settings-checkbox" onchange="settingsChanged()">
           <span class="error-msg"></span>
         </div>
       </div>
@@ -621,10 +621,10 @@ var TABLE_LIST = ["Metadata", "Variables"];
 
 var Settings_SUBCATS = {
   general: ["SSID", "Password", "Class_Pool_Size", "Var_Pool_Size"],
-  mqtt: ["Host", "Port", "Data_Topic", "Alert_Topic", "Username", "Mqtt_Password"],
-  json: ["Metadata", "Constraints", "Modbus"]
+  mqtt: ["Host", "Port", "Data_Topic", "Alert_Topic", "Username", "Password"],
+  json includes: ["Metadata", "Constraints", "Type_Unit"]
 };
-var Settings_TABLE_COLS = ["SSID", "Password", "Class_Pool_Size", "Var_Pool_Size", "Host", "Port", "Data_Topic", "Alert_Topic", "Username", "Mqtt_Password", "Metadata", "Constraints", "Modbus"];
+var Settings_TABLE_COLS = ["SSID", "Password", "Class_Pool_Size", "Var_Pool_Size", "Host", "Port", "Data_Topic", "Alert_Topic", "Username", "Password", "Metadata", "Constraints", "Type_Unit"];
 
 
 /* ======== PRELOADED XML (embedded at build time) ======== */
