@@ -14,15 +14,15 @@ class_t *head = DM_PTR_NULL;
 class_t *tail = DM_PTR_NULL;
 bool     dirty = false;
 
-class_t  class_pool[MAX_CLASS_CAP];
-bool     used_class[MAX_CLASS_CAP];
+class_t  class_pool[MAX_CLASS_POOL_CAP];
+bool     used_class[MAX_CLASS_POOL_CAP];
 
-var_t    var_pool[MAX_VAR_CAP];
-bool     used_var[MAX_VAR_CAP];
+var_t    var_pool[MAX_VAR_POOL_CAP];
+bool     used_var[MAX_VAR_POOL_CAP];
 
 /* Runtime pool-size accessors — declared in hashmap.h, defined here */
 int32_t dm_max_class(void) { return effective_class_pool_size(); }
-int32_t dm_max_var(void)   { return 2 * effective_var_pool_size(); }
+int32_t dm_max_var(void)   { return effective_var_pool_size(); }
 
 uint16_t last_class_idx = 0;
 uint16_t last_var_idx   = 0;

@@ -270,8 +270,10 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
         constraints_tbl->rows[constraints_count].Fault_Code = _t_Fault_Code;
         constraints_tbl->rows[constraints_count].Increment = _t_Increment;
         constraints_tbl->rows[constraints_count].value_ptr = &description_tbl->rows[description_count].Value;
-        constraints_tbl->rows[constraints_count].constraints_id = -1;
-        description_tbl->rows[description_count].constraint_id = constraints_count;
+        int _new_cid = constraints_count++;
+        constraints_tbl->rows[_new_cid].constraints_id = -1;
+        /* first constraint for this new variable */
+        description_tbl->rows[description_count].constraint_id = _new_cid;
         if (_t_Increment != -9999.0f) {
           increment_pool.rows[increment_pool.count].Increment = _t_Increment;
           increment_pool.rows[increment_pool.count].ini_val   = description_tbl->rows[description_count].Value;
@@ -279,7 +281,6 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
           increment_pool.rows[increment_pool.count].value_ptr = &description_tbl->rows[description_count].Value;
           increment_pool.count++;
         }
-        constraints_count++;
       } else {
         description_tbl->rows[description_count].constraint_id = -1;
       }
@@ -294,15 +295,6 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
           uint16_t _new_vid = dm_var_map_find(_new_cls, description_tbl->rows[description_count].Name, description_tbl->rows[description_count].Type);
           if (_new_vid != INVALID_INDEX && description_tbl->rows[description_count].constraint_id != -1)
             var_pool[_new_vid].constraint_idx = description_tbl->rows[description_count].constraint_id;
-        }
-      }
-
-      Serial.printf("[%d] Class=%s  Name=%s  Type=%s  Value=%.4f  constraint_id=%d\n", description_count, description_tbl->rows[description_count].Class ? description_tbl->rows[description_count].Class : "(null)", description_tbl->rows[description_count].Name ? description_tbl->rows[description_count].Name : "(null)", description_tbl->rows[description_count].Type ? description_tbl->rows[description_count].Type : "(null)", description_tbl->rows[description_count].Value, description_tbl->rows[description_count].constraint_id);
-      {
-        int _cid = description_tbl->rows[description_count].constraint_id;
-        while (_cid != -1) {
-          Serial.printf("    C[%d] Operation_ID=%.4f  Threshold=%.4f  Fault_Code=%.4f  Increment=%.4f\n", _cid, constraints_tbl->rows[_cid].Operation_ID, constraints_tbl->rows[_cid].Threshold, constraints_tbl->rows[_cid].Fault_Code, constraints_tbl->rows[_cid].Increment);
-          _cid = constraints_tbl->rows[_cid].constraints_id;
         }
       }
 
@@ -342,6 +334,18 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
   modbus_tbl->count = modbus_count;
   constraints_tbl->count = constraints_count;
   Serial.printf("[Variables] total rows: %d  modbus: %d  constraints: %d\n", description_count, modbus_count, constraints_count);
+  /* ── post-parse: full desc table with complete constraint chains ── */
+  for (int _i = 0; _i < description_count; _i++) {
+    Serial.printf("[%d] Class=%s  Name=%s  Type=%s  Value=%.4f  constraint_id=%d\n", _i, description_tbl->rows[_i].Class ? description_tbl->rows[_i].Class : "(null)", description_tbl->rows[_i].Name ? description_tbl->rows[_i].Name : "(null)", description_tbl->rows[_i].Type ? description_tbl->rows[_i].Type : "(null)", description_tbl->rows[_i].Value, description_tbl->rows[_i].constraint_id);
+    {
+      int _cid = description_tbl->rows[_i].constraint_id;
+      while (_cid != -1) {
+        Serial.printf("    C[%d] Operation_ID=%.4f  Threshold=%.4f  Fault_Code=%.4f  Increment=%.4f\n", _cid, constraints_tbl->rows[_cid].Operation_ID, constraints_tbl->rows[_cid].Threshold, constraints_tbl->rows[_cid].Fault_Code, constraints_tbl->rows[_cid].Increment);
+        _cid = constraints_tbl->rows[_cid].constraints_id;
+      }
+    }
+  }
+
   return description_count;
 }
 
@@ -359,6 +363,10 @@ void free_variables_description_table(variables_description_table_t *tbl) {
 int load_variables_from_spiffs(void) {
   free_variables_description_table(&variables_description_table);
   increment_pool.count = 0;
+  variables_modbus_table.count = 0;
+  variables_constraints_table.count = 0;
+  for (int _pi = 0; _pi < effective_var_pool_size(); _pi++)
+    var_pool[_pi].constraint_idx = INVALID_INDEX;
   String content;
   File f = SPIFFS.open("/Variables.xml", "r");
   if (f) { content = f.readString(); f.close(); }
@@ -459,6 +467,45 @@ int load_settings_from_spiffs(void) {
   f.close();
   parse_settings_xml(content.c_str());
   return 1;
+}
+
+
+/* ── check_variable_constraints ─────────────────────────────────────────────
+ * Walk the constraint chain attached to var_pool[var_pool_id].
+ * For each row where Operation_ID and Threshold are present,
+ * evaluate the binary comparison between the variable's live value
+ * (via ext_addr) and the threshold.  Print and return true on any match.
+ * Operation cases are generated from Metadata.xml Operation_ID rows. */
+bool check_variable_constraints(uint16_t var_pool_id) {
+  if (var_pool_id == INVALID_INDEX) return false;
+  if (var_pool[var_pool_id].ext_addr == NULL) return false;
+  float _val  = *(float *)var_pool[var_pool_id].ext_addr;
+  int   _cid  = (int)var_pool[var_pool_id].constraint_idx;
+  bool  _triggered = false;
+  while (_cid != -1) {
+    float _op_id  = variables_constraints_table.rows[_cid].Operation_ID;
+    float _thresh = variables_constraints_table.rows[_cid].Threshold;
+    float _fault  = variables_constraints_table.rows[_cid].Fault_Code;
+    if (_op_id != -9999.0f && _thresh != -9999.0f) {
+      bool _match = false;
+      switch ((int)_op_id) {
+        case 0: _match = (_val == _thresh); break;  /* Equals to */
+        case 1: _match = (_val < _thresh); break;  /* Less than */
+        case 2: _match = (_val > _thresh); break;  /* Greater than */
+        case 3: _match = (_val >= _thresh); break;  /* Greater than/ Equals to */
+        case 4: _match = (_val <= _thresh); break;  /* Less than/ Equals to */
+        case 5: _match = (_val != _thresh); break;  /* Not Equals to */
+        default: break;
+      }
+      if (_match) {
+        _triggered = true;
+        Serial.printf("[Constraint] var_pool[%d]  val=%.4f  op=%d  thresh=%.4f  fault=%.0f  TRIGGERED\n",
+                      var_pool_id, _val, (int)_op_id, _thresh, _fault);
+      }
+    }
+    _cid = variables_constraints_table.rows[_cid].constraints_id;
+  }
+  return _triggered;
 }
 
 

@@ -7,6 +7,16 @@ import sys
 XSD_NS = "{http://www.w3.org/2001/XMLSchema}"
 MAX_ROWS = 128
 
+# Must match hashmap.h defines — single source of truth for Settings field max values
+MAX_CLASS_POOL_CAP = 64
+MAX_VAR_POOL_CAP   = 256
+
+# Fields whose values are capped by the pool caps; used by settings renderer
+_POOL_CAP_MAP = {
+    "Class_Pool_Size": MAX_CLASS_POOL_CAP,
+    "Var_Pool_Size":   MAX_VAR_POOL_CAP,
+}
+
 # ── JS validation rules ──
 TYPE_RULES = {
     "float":   ("isNaN(v)",         "Must be a number"),
@@ -229,6 +239,13 @@ def gen_validator_js(tables):
         "\n"
         f"{switch_block}"
         "\n"
+        "  /* max-value check (pool-size fields carry a max= attribute) */\n"
+        "  if (!msg && input.hasAttribute('max')) {\n"
+        "    const maxVal = parseInt(input.getAttribute('max'), 10);\n"
+        "    const numVal = parseInt(v, 10);\n"
+        "    if (!isNaN(numVal) && numVal > maxVal) msg = 'Must be \u2264 ' + maxVal;\n"
+        "  }\n"
+        "\n"
         "  if (msg) {\n"
         '    input.classList.add("invalid");\n'
         "    errSpan.textContent = msg;\n"
@@ -333,6 +350,7 @@ def gen_table_blocks(tables, validity_field_names=None, subcategories=None, hidd
   <div class="table-wrap">
     <table>
     <thead><tr>
+      <th class="row-actions-left"></th>
 """
         for n, _ in fields:
             html += f"      <th>{n}</th>\n"
@@ -800,7 +818,7 @@ def _gen_subcat_block(lines, t, subcat_name, subcat_fields, field_map, has_value
     lines.append("")
 
     # ── max rows ──
-    lines.append(f"#define MAX_{PREFIX}_ROWS {max_rows}")
+    lines.append(f"#define MAX_{PREFIX}_ROWS MAX_VAR_POOL_CAP")
     lines.append("")
 
     # ── table struct ──
@@ -862,6 +880,7 @@ def gen_c_schema_h(tables, subcategories=None, settings_subcats=None, settings_f
     lines.append("#include <stdlib.h>")
     lines.append("#include <math.h>")
     lines.append("#include <string.h>")
+    lines.append("#include \"hashmap.h\"")
     lines.append("")
 
     for t, fields in tables.items():
@@ -919,7 +938,7 @@ def gen_c_schema_h(tables, subcategories=None, settings_subcats=None, settings_f
             lines.append(f"}} {tl}_row_t;")
             lines.append("")
 
-            lines.append(f"#define MAX_{tu}_ROWS {max_rows}")
+            lines.append(f"#define MAX_{tu}_ROWS MAX_VAR_POOL_CAP")
             lines.append("")
 
             lines.append(f"typedef struct {{")
@@ -1025,12 +1044,18 @@ def gen_c_schema_h(tables, subcategories=None, settings_subcats=None, settings_f
                 lines.append("")
                 if "Var_Pool_Size" in schema_fields:
                     lines.append("static inline int32_t effective_var_pool_size(void) {")
-                    lines.append(f"  return {pool_struct}.Var_Pool_Size > 0 ? {pool_struct}.Var_Pool_Size : 128;")
+                    lines.append(f"  int32_t v = {pool_struct}.Var_Pool_Size;")
+                    lines.append(f"  if (v <= 0)              v = MAX_VAR_POOL_CAP;")
+                    lines.append(f"  if (v > MAX_VAR_POOL_CAP) v = MAX_VAR_POOL_CAP;")
+                    lines.append(f"  return v;")
                     lines.append("}")
                     lines.append("")
                 if "Class_Pool_Size" in schema_fields:
                     lines.append("static inline int32_t effective_class_pool_size(void) {")
-                    lines.append(f"  return {pool_struct}.Class_Pool_Size > 0 ? {pool_struct}.Class_Pool_Size : 32;")
+                    lines.append(f"  int32_t v = {pool_struct}.Class_Pool_Size;")
+                    lines.append(f"  if (v <= 0)                v = MAX_CLASS_POOL_CAP;")
+                    lines.append(f"  if (v > MAX_CLASS_POOL_CAP) v = MAX_CLASS_POOL_CAP;")
+                    lines.append(f"  return v;")
                     lines.append("}")
                     lines.append("")
 
@@ -1058,6 +1083,99 @@ def _gen_field_extract(lines, name, typ, prefix, PREFIX, tbl_var, idx="count"):
     else:  # string
         lines.append(f"    {tbl_var}->rows[{idx}].{ci} = buf[0] ? strdup(buf) : NULL;")
     lines.append("")
+
+
+# LUT of every recognised Operation_ID message → C binary operator.
+# Keys are lowercased and stripped; matching is exact after normalisation.
+# Add new rows here to support additional operator descriptions in Metadata.xml.
+_OP_LUT = {
+    # ── equality ──
+    "equals to":                        "==",
+    "equal to":                         "==",
+    "equals":                           "==",
+    "equal":                            "==",
+    "==":                               "==",
+    "is equal to":                      "==",
+
+    # ── inequality ──
+    "not equals to":                    "!=",
+    "not equal to":                     "!=",
+    "not equals":                       "!=",
+    "not equal":                        "!=",
+    "!=":                               "!=",
+    "is not equal to":                  "!=",
+
+    # ── less than ──
+    "less than":                        "<",
+    "lower than":                       "<",
+    "below":                            "<",
+    "<":                                "<",
+    "is less than":                     "<",
+
+    # ── greater than ──
+    "greater than":                     ">",
+    "higher than":                      ">",
+    "above":                            ">",
+    ">":                                ">",
+    "is greater than":                  ">",
+
+    # ── greater than or equal ──
+    "greater than/ equals to":          ">=",
+    "greater than/equals to":           ">=",
+    "greater than/ equal to":           ">=",
+    "greater than/equal to":            ">=",
+    "greater than or equals to":        ">=",
+    "greater than or equal to":         ">=",
+    "greater than or equal":            ">=",
+    "greater or equal to":              ">=",
+    "greater or equal":                 ">=",
+    ">=":                               ">=",
+    "at least":                         ">=",
+    "is greater than or equal to":      ">=",
+
+    # ── less than or equal ──
+    "less than/ equals to":             "<=",
+    "less than/equals to":              "<=",
+    "less than/ equal to":              "<=",
+    "less than/equal to":               "<=",
+    "less than or equals to":           "<=",
+    "less than or equal to":            "<=",
+    "less than or equal":               "<=",
+    "less or equal to":                 "<=",
+    "less or equal":                    "<=",
+    "<=":                               "<=",
+    "at most":                          "<=",
+    "is less than or equal to":         "<=",
+}
+
+
+def _message_to_c_op(msg):
+    """Map an Operation_ID Message string to a C binary operator via LUT."""
+    return _OP_LUT.get(msg.strip().lower())
+
+
+def _parse_operation_ids(metadata_xml):
+    """Parse Metadata XML and return Operation_ID rows as [(int_key, message, c_op), ...]."""
+    ops = []
+    try:
+        root = ET.fromstring(metadata_xml)
+        for row in root.findall("row"):
+            cls_el = row.find("Class")
+            key_el = row.find("Key")
+            msg_el = row.find("Message")
+            if (cls_el is not None and cls_el.text == "Operation_ID"
+                    and key_el is not None and msg_el is not None):
+                try:
+                    k    = int(float(key_el.text))
+                    msg  = (msg_el.text or "").strip()
+                    c_op = _message_to_c_op(msg)
+                    if c_op:
+                        ops.append((k, msg, c_op))
+                except (ValueError, TypeError):
+                    pass
+    except ET.ParseError:
+        pass
+    return sorted(ops, key=lambda x: x[0])
 
 
 def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=None,
@@ -1329,17 +1447,25 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                     if temp_vars and cond:
                         lines.append(f"{p}    if ({cond}) {{")
                         lines.append(f"{p}      /* at least one {osc} field is real — commit this row */")
+
                         for fn, typ in ofields:
                             if typ in C_NUMERIC_TYPES:
                                 ci = c_ident(fn)
                                 temp = f"_t_{ci}"
                                 lines.append(f"{p}      {osl}_tbl->rows[{osl}_count].{ci} = {temp};")
+
                         lines.append(f"{p}      {osl}_tbl->rows[{osl}_count].value_ptr = &{src_sl}_tbl->rows[{src_sl}_count].Value;")
+
                         if "constraint" in osl:
-                            lines.append(f"{p}      {osl}_tbl->rows[{osl}_count].constraints_id = -1;")
-                            lines.append(f"{p}      {src_sl}_tbl->rows[{src_sl}_count].constraint_id = {osl}_count;")
-                            inc_temp   = next((tv for fn, tv in temp_vars if c_ident(fn) == "Increment"), None)
+                            lines.append(f"{p}      int _new_cid = {osl}_count++;")
+                            lines.append(f"{p}      {osl}_tbl->rows[_new_cid].constraints_id = -1;")
+
+                            lines.append(f"{p}      /* first constraint for this new variable */")
+                            lines.append(f"{p}      {src_sl}_tbl->rows[{src_sl}_count].constraint_id = _new_cid;")
+
+                            inc_temp = next((tv for fn, tv in temp_vars if c_ident(fn) == "Increment"), None)
                             thresh_temp = next((tv for fn, tv in temp_vars if c_ident(fn) == "Threshold"), None)
+
                             if inc_temp:
                                 lines.append(f"{p}      if ({inc_temp} != -9999.0f) {{")
                                 lines.append(f"{p}        increment_pool.rows[increment_pool.count].Increment = {inc_temp};")
@@ -1348,7 +1474,9 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                                 lines.append(f"{p}        increment_pool.rows[increment_pool.count].value_ptr = &{src_sl}_tbl->rows[{src_sl}_count].Value;")
                                 lines.append(f"{p}        increment_pool.count++;")
                                 lines.append(f"{p}      }}")
-                        lines.append(f"{p}      {osl}_count++;")
+                        else:
+                            lines.append(f"{p}      {osl}_count++;")
+
                         lines.append(f"{p}    }} else {{")
                         if "constraint" in osl:
                             lines.append(f"{p}      {src_sl}_tbl->rows[{src_sl}_count].constraint_id = -1;")
@@ -1392,21 +1520,6 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                         lines.append(f"        }}")
                         lines.append(f"      }}")
                         lines.append("")
-                    lines.append(f'      Serial.printf("[%d] {fmt_str}\\n", {all_args});')
-                    # Print constraint chain if any
-                    for osc, osl, osu, prefix_o, PREFIX_O, ofields, temp_vars, cond in osc_info:
-                        if "constraint" in osl and temp_vars:
-                            num_fields = [(c_ident(fn), typ) for fn, typ in ofields if typ in C_NUMERIC_TYPES]
-                            c_fmt  = "  ".join(f"{ci}=%.4f" for ci, _ in num_fields)
-                            c_args = ", ".join(f"{osl}_tbl->rows[_cid].{ci}" for ci, _ in num_fields)
-                            lines.append(f"      {{")
-                            lines.append(f"        int _cid = {sv}->rows[{si}].constraint_id;")
-                            lines.append(f"        while (_cid != -1) {{")
-                            lines.append(f'          Serial.printf("    C[%d] {c_fmt}\\n", _cid, {c_args});')
-                            lines.append(f"          _cid = {osl}_tbl->rows[_cid].constraints_id;")
-                            lines.append(f"        }}")
-                            lines.append(f"      }}")
-                    lines.append("")
                     lines.append(f"      {src_sl}_count++;")
                     lines.append(f"    }} else {{")
                     lines.append(f"      /* ── EXISTING VAR: append constraint to chain; value_ptr → original var's Value ── */")
@@ -1456,6 +1569,44 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                     ocount_fmt = "  ".join(f"{osc.lower()}: %d" for osc in optional_scs)
                     ocount_vars = ", ".join(f"{osc.lower()}_count" for osc in optional_scs)
                     lines.append(f'  Serial.printf("[{t}] total rows: %d  {ocount_fmt}\\n", {src_sl}_count, {ocount_vars});')
+                # Post-parse: print full desc table with complete constraint chains
+                has_constraint_osc = any("constraint" in osl_ and temp_vars_ and cond_
+                                         for _, osl_, _, _, _, _, temp_vars_, cond_ in osc_info)
+                if use_hashmap and has_constraint_osc:
+                    post_fmts = []
+                    post_args = []
+                    for fn, ftyp in sc_fields_typed:
+                        ci = c_ident(fn)
+                        if ftyp in C_NUMERIC_TYPES:
+                            post_fmts.append(f"{fn}=%.4f")
+                            post_args.append(f"{sv}->rows[_i].{ci}")
+                        elif ftyp in C_INT_TYPES:
+                            post_fmts.append(f"{fn}=%d")
+                            post_args.append(f"(int){sv}->rows[_i].{ci}")
+                        else:
+                            post_fmts.append(f"{fn}=%s")
+                            post_args.append(f'{sv}->rows[_i].{ci} ? {sv}->rows[_i].{ci} : "(null)"')
+                    post_fmts.append("constraint_id=%d")
+                    post_args.append(f"{sv}->rows[_i].constraint_id")
+                    post_fmt_str = "  ".join(post_fmts)
+                    post_all_args = ", ".join(["_i"] + post_args)
+                    lines.append(f"  /* ── post-parse: full desc table with complete constraint chains ── */")
+                    lines.append(f"  for (int _i = 0; _i < {src_sl}_count; _i++) {{")
+                    lines.append(f'    Serial.printf("[%d] {post_fmt_str}\\n", {post_all_args});')
+                    for osc, osl, osu, prefix_o, PREFIX_O, ofields, temp_vars, cond in osc_info:
+                        if "constraint" in osl and temp_vars:
+                            num_fields = [(c_ident(fn), typ) for fn, typ in ofields if typ in C_NUMERIC_TYPES]
+                            c_fmt  = "  ".join(f"{ci}=%.4f" for ci, _ in num_fields)
+                            c_args = ", ".join(f"{osl}_tbl->rows[_cid].{ci}" for ci, _ in num_fields)
+                            lines.append(f"    {{")
+                            lines.append(f"      int _cid = {sv}->rows[_i].constraint_id;")
+                            lines.append(f"      while (_cid != -1) {{")
+                            lines.append(f'        Serial.printf("    C[%d] {c_fmt}\\n", _cid, {c_args});')
+                            lines.append(f"        _cid = {osl}_tbl->rows[_cid].constraints_id;")
+                            lines.append(f"      }}")
+                            lines.append(f"    }}")
+                    lines.append(f"  }}")
+                    lines.append("")
                 lines.append(f"  return {src_sl}_count;")
 
             else:
@@ -1523,6 +1674,14 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
 
             if any("constraint" in osc.lower() for osc in optional_scs):
                 lines.append("  increment_pool.count = 0;")
+                # Reset optional subcat table counts so the new parse starts fresh
+                for osc in optional_scs:
+                    osl = osc.lower()
+                    lines.append(f"  {tl}_{osl}_table.count = 0;")
+                # Reset constraint_idx for all var-pool entries so the existing-var
+                # path does not follow stale chain pointers from the previous parse.
+                lines.append("  for (int _pi = 0; _pi < effective_var_pool_size(); _pi++)")
+                lines.append("    var_pool[_pi].constraint_idx = INVALID_INDEX;")
 
             if t in xml_map:
                 lines.append(f"  String content;")
@@ -1783,6 +1942,46 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
             lines.append("")
             lines.append("")
 
+    # ── constraint checker — generated from Operation_ID rows in Metadata.xml ──
+    if xml_map and "Metadata" in xml_map:
+        op_entries = _parse_operation_ids(xml_map["Metadata"])
+        if op_entries:
+            lines.append("/* ── check_variable_constraints ─────────────────────────────────────────────")
+            lines.append(" * Walk the constraint chain attached to var_pool[var_pool_id].")
+            lines.append(" * For each row where Operation_ID and Threshold are present,")
+            lines.append(" * evaluate the binary comparison between the variable's live value")
+            lines.append(" * (via ext_addr) and the threshold.  Print and return true on any match.")
+            lines.append(" * Operation cases are generated from Metadata.xml Operation_ID rows. */")
+            lines.append("bool check_variable_constraints(uint16_t var_pool_id) {")
+            lines.append("  if (var_pool_id == INVALID_INDEX) return false;")
+            lines.append("  if (var_pool[var_pool_id].ext_addr == NULL) return false;")
+            lines.append("  float _val  = *(float *)var_pool[var_pool_id].ext_addr;")
+            lines.append("  int   _cid  = (int)var_pool[var_pool_id].constraint_idx;")
+            lines.append("  bool  _triggered = false;")
+            lines.append("  while (_cid != -1) {")
+            lines.append("    float _op_id  = variables_constraints_table.rows[_cid].Operation_ID;")
+            lines.append("    float _thresh = variables_constraints_table.rows[_cid].Threshold;")
+            lines.append("    float _fault  = variables_constraints_table.rows[_cid].Fault_Code;")
+            lines.append("    if (_op_id != -9999.0f && _thresh != -9999.0f) {")
+            lines.append("      bool _match = false;")
+            lines.append("      switch ((int)_op_id) {")
+            for key, msg, c_op in op_entries:
+                lines.append(f"        case {key}: _match = (_val {c_op} _thresh); break;  /* {msg} */")
+            lines.append("        default: break;")
+            lines.append("      }")
+            lines.append("      if (_match) {")
+            lines.append("        _triggered = true;")
+            lines.append('        Serial.printf("[Constraint] var_pool[%d]  val=%.4f  op=%d  thresh=%.4f  fault=%.0f  TRIGGERED\\n",')
+            lines.append("                      var_pool_id, _val, (int)_op_id, _thresh, _fault);")
+            lines.append("      }")
+            lines.append("    }")
+            lines.append("    _cid = variables_constraints_table.rows[_cid].constraints_id;")
+            lines.append("  }")
+            lines.append("  return _triggered;")
+            lines.append("}")
+            lines.append("")
+            lines.append("")
+
     # ── provision_spiffs_xml: no-op — XMLs are only created by the web UI ──
     # Load functions fall back to embedded defaults when no SPIFFS file exists.
     # Captive portal credentials go to NVS, not SPIFFS.
@@ -1889,15 +2088,17 @@ def gen_settings_block(name, subcats, fields):
                 html += f'          <div class="form-grid">\n'
                 for fn in inner_fields:
                     typ = field_map[fn]
-                    label = fn.replace("_", " ")
+                    cap = _POOL_CAP_MAP.get(fn)
+                    label = fn.replace("_", " ") + (f" (max {cap})" if cap else "")
                     html += f'            <div class="field">\n'
                     html += f'              <label>{label}</label>\n'
                     if typ == "boolean":
                         html += (f'              <input type="checkbox" data-type="{typ}"'
                                  f' data-name="{fn}" class="settings-checkbox" onchange="settingsChanged()">\n')
                     else:
+                        max_attr = f' max="{cap}"' if cap else ""
                         html += (f'              <input placeholder="{typ}" data-type="{typ}"'
-                                 f' data-name="{fn}" oninput="validateField(this); settingsChanged()">\n')
+                                 f' data-name="{fn}"{max_attr} oninput="validateField(this); settingsChanged()">\n')
                     html += f'              <span class="error-msg"></span>\n'
                     html += f'            </div>\n'
                 html += f'          </div>\n'
@@ -1907,21 +2108,26 @@ def gen_settings_block(name, subcats, fields):
             html += f'      <div class="form-grid">\n'
             for fn in sc_val:
                 typ = field_map[fn]
-                label = fn.replace("_", " ")
+                cap = _POOL_CAP_MAP.get(fn)
+                label = fn.replace("_", " ") + (f" (max {cap})" if cap else "")
                 html += f'        <div class="field">\n'
                 html += f'          <label>{label}</label>\n'
                 if typ == "boolean":
                     html += (f'          <input type="checkbox" data-type="{typ}"'
                              f' data-name="{fn}" class="settings-checkbox" onchange="settingsChanged()">\n')
                 else:
+                    max_attr = f' max="{cap}"' if cap else ""
                     html += (f'          <input placeholder="{typ}" data-type="{typ}"'
-                             f' data-name="{fn}" oninput="validateField(this); settingsChanged()">\n')
+                             f' data-name="{fn}"{max_attr} oninput="validateField(this); settingsChanged()">\n')
                 html += f'          <span class="error-msg"></span>\n'
                 html += f'        </div>\n'
             html += f'      </div>\n'
         html += f'    </div>\n'
-    # Single Save button at the bottom of all subcategory rows (disabled until a field changes)
-    html += f'    <button id="settings-save-btn" onclick="saveSettings()" class="insert-btn" disabled>Save</button>\n'
+    # Save + Rewind buttons (both disabled until a field changes)
+    html += f'    <div class="settings-btn-row">\n'
+    html += f'      <button id="settings-save-btn" onclick="saveSettings()" class="insert-btn settings-save-btn" disabled>Save</button>\n'
+    html += f'      <button id="settings-rewind-btn" onclick="rewindSettings()" class="settings-rewind-btn" disabled title="Undo all changes">&#x21BA;</button>\n'
+    html += f'    </div>\n'
 
     html += f'  </div>\n'
 
@@ -2083,10 +2289,12 @@ function renderTable(table, schema) {
   }
 
   state[table].forEach((r, i) => {
-    let tr = "<tr>";
+    let tr = `<tr><td class="row-actions-left">` +
+             `<span class="copy-row" onclick="copyRow('${table}',${i})" title="Copy to form">&#x2398;</span>` +
+             `</td>`;
     r.forEach(v => { tr += `<td>${v ?? ""}</td>`; });
     tr += `<td class="row-actions">` +
-          `<span class="copy-row" onclick="copyRow('${table}',${i})" title="Copy to form">&#x2398;</span>` +
+          `<span class="edit-row" onclick="editRow('${table}',${i})" title="Edit (copy &amp; delete)">&#x270F;</span>` +
           `<span class="delete" onclick="deleteRow('${table}',${i})" title="Delete">&#x2715;</span>` +
           `</td></tr>`;
     body.innerHTML += tr;
@@ -2133,6 +2341,13 @@ function deleteRow(table, i) {
   if (!state[table]) return;
   state[table].splice(i, 1);
   renderTable(table, window[table + "_SCHEMA"]);
+}
+
+
+/* ---------- EDIT ROW (copy to form + delete row) ---------- */
+function editRow(table, i) {
+  copyRow(table, i);
+  deleteRow(table, i);
 }
 
 
@@ -2338,9 +2553,27 @@ function downloadZIP() {
 
 /* ---------- UPDATE SETTINGS TABLE ---------- */
 /* ---------- SETTINGS CHANGED ---------- */
+var _settingsOriginal = {};   /* snapshot taken when settings are loaded / saved */
+
 function settingsChanged() {
-  var btn = document.getElementById("settings-save-btn");
-  if (btn) btn.disabled = false;
+  var save   = document.getElementById("settings-save-btn");
+  var rewind = document.getElementById("settings-rewind-btn");
+  if (save)   save.disabled   = false;
+  if (rewind) rewind.disabled = false;
+}
+
+/* ---------- REWIND SETTINGS ---------- */
+function rewindSettings() {
+  document.querySelectorAll(".settings-bar input[data-name]").forEach(function(inp) {
+    var orig = _settingsOriginal[inp.dataset.name];
+    if (orig === undefined) return;
+    if (inp.type === "checkbox") inp.checked = (orig === "true");
+    else inp.value = orig;
+  });
+  var save   = document.getElementById("settings-save-btn");
+  var rewind = document.getElementById("settings-rewind-btn");
+  if (save)   save.disabled   = true;
+  if (rewind) rewind.disabled = true;
 }
 
 
@@ -2369,8 +2602,12 @@ async function saveSettings() {
     }
   }
   alert("Updates have been saved successfully");
-  var btn = document.getElementById("settings-save-btn");
-  if (btn) btn.disabled = true;
+  /* snapshot the saved state as the new baseline for Rewind */
+  _settingsOriginal = Object.assign({}, state["Settings"]);
+  var save   = document.getElementById("settings-save-btn");
+  var rewind = document.getElementById("settings-rewind-btn");
+  if (save)   save.disabled   = true;
+  if (rewind) rewind.disabled = true;
 }
 
 
@@ -2403,43 +2640,53 @@ function settingsToXML() {
 }
 
 
-/* ---------- LOAD SETTINGS (ESP only — populate inputs + state from /Settings.xml) ---------- */
+/* ---------- LOAD SETTINGS — populate inputs + state from Settings XML ---------- */
 /* Uses simple indexOf-based tag extraction (mirrors C++ extract_tag) instead of
- * DOMParser so it never silently fails on slightly malformed XML. */
+ * DOMParser so it never silently fails on slightly malformed XML.
+ * PC (file://): uses PRELOAD_SETTINGS embedded at build time.
+ * ESP: fetches /Settings.xml from the device. */
 function loadSettings() {
-  if (location.hostname === "") return;
+  /* Extract the text content between <Tag>…</Tag>. Returns null if absent. */
+  function extractTag(str, tag) {
+    var open  = "<" + tag + ">";
+    var close = "</" + tag + ">";
+    var s = str.indexOf(open);
+    if (s === -1) return null;
+    s += open.length;
+    var e = str.indexOf(close, s);
+    if (e === -1) return null;
+    return str.substring(s, e).trim();
+  }
+
+  function applyXml(xml) {
+    if (!xml) return;
+    state["Settings"] = {};
+    Settings_TABLE_COLS.forEach(function(field) {
+      var val = extractTag(xml, field);
+      if (val === null) return;
+      state["Settings"][field] = val;
+      var inp = document.querySelector(".settings-bar input[data-name='" + field + "']");
+      if (!inp) return;
+      if (inp.type === "checkbox") inp.checked = (val === "true");
+      else inp.value = val;
+    });
+    /* snapshot loaded values as baseline for Rewind */
+    _settingsOriginal = Object.assign({}, state["Settings"]);
+    var save   = document.getElementById("settings-save-btn");
+    var rewind = document.getElementById("settings-rewind-btn");
+    if (save)   save.disabled   = true;
+    if (rewind) rewind.disabled = true;
+  }
+
+  /* PC mode: use build-time-embedded content (fetch blocked by CORS on file://) */
+  if (location.hostname === "" && PRELOAD_SETTINGS) {
+    applyXml(PRELOAD_SETTINGS);
+    return;
+  }
+
   fetch("/Settings.xml", { cache: "no-store" })
     .then(function(r) { if (r.ok) return r.text(); })
-    .then(function(xml) {
-      if (!xml) return;
-      state["Settings"] = {};
-
-      /* Extract the text content between <Tag>…</Tag>. Returns null if absent. */
-      function extractTag(str, tag) {
-        var open  = "<" + tag + ">";
-        var close = "</" + tag + ">";
-        var s = str.indexOf(open);
-        if (s === -1) return null;
-        s += open.length;
-        var e = str.indexOf(close, s);
-        if (e === -1) return null;
-        return str.substring(s, e).trim();
-      }
-
-      Settings_TABLE_COLS.forEach(function(field) {
-        var val = extractTag(xml, field);
-        if (val === null) return;
-        state["Settings"][field] = val;
-        var inp = document.querySelector(".settings-bar input[data-name='" + field + "']");
-        if (!inp) return;
-        if (inp.type === "checkbox") inp.checked = (val === "true");
-        else inp.value = val;
-      });
-    })
-    .then(function() {
-      var btn = document.getElementById("settings-save-btn");
-      if (btn) btn.disabled = true;
-    })
+    .then(applyXml)
     .catch(function(e) { console.error("[ACMS] loadSettings failed:", e); });
 }
 
@@ -2723,11 +2970,14 @@ def main():
         print(f"  Embedding Settings.xml")
 
     pc_page = base.replace("%PRELOAD_XML%", ",\n".join(preload_entries))
+    pc_page = pc_page.replace("%PRELOAD_SETTINGS%",
+                              json.dumps(settings_xml_content) if (settings_subcats and settings_fields) else '""')
     with open("generated_page.html", "w") as f:
         f.write(pc_page)
 
-    # ESP version (empty PRELOAD_XML)
+    # ESP version (empty PRELOAD_XML, no embedded settings)
     esp_page = base.replace("%PRELOAD_XML%", "")
+    esp_page = esp_page.replace("%PRELOAD_SETTINGS%", '""')
     with open("web_page.h", "w") as f:
         f.write("#pragma once\n\n")
         f.write('const char WEB_PAGE[] PROGMEM = R"HTML(\n')
