@@ -397,13 +397,13 @@ button {
           <span class="error-msg"></span>
         </div>
         <div class="field">
-          <label>Username</label>
-          <input placeholder="string" data-type="string" data-name="Username" oninput="validateField(this); settingsChanged()">
+          <label>Mqtt Username</label>
+          <input placeholder="string" data-type="string" data-name="Mqtt_Username" oninput="validateField(this); settingsChanged()">
           <span class="error-msg"></span>
         </div>
         <div class="field">
-          <label>Password</label>
-          <input placeholder="string" data-type="string" data-name="Password" oninput="validateField(this); settingsChanged()">
+          <label>Mqtt Password</label>
+          <input placeholder="string" data-type="string" data-name="Mqtt_Password" oninput="validateField(this); settingsChanged()">
           <span class="error-msg"></span>
         </div>
       </div>
@@ -413,17 +413,17 @@ button {
       <div class="form-grid">
         <div class="field">
           <label>Metadata</label>
-          <input type="checkbox" data-type="boolean" data-name="Metadata" class="settings-checkbox" onchange="settingsChanged()">
+          <input type="checkbox" data-type="boolean" data-name="Metadata" class="settings-checkbox" onchange="saveCheckboxSetting(this)">
           <span class="error-msg"></span>
         </div>
         <div class="field">
           <label>Constraints</label>
-          <input type="checkbox" data-type="boolean" data-name="Constraints" class="settings-checkbox" onchange="settingsChanged()">
+          <input type="checkbox" data-type="boolean" data-name="Constraints" class="settings-checkbox" onchange="saveCheckboxSetting(this)">
           <span class="error-msg"></span>
         </div>
         <div class="field">
           <label>Type Unit</label>
-          <input type="checkbox" data-type="boolean" data-name="Type_Unit" class="settings-checkbox" onchange="settingsChanged()">
+          <input type="checkbox" data-type="boolean" data-name="Type_Unit" class="settings-checkbox" onchange="saveCheckboxSetting(this)">
           <span class="error-msg"></span>
         </div>
       </div>
@@ -622,10 +622,10 @@ var TABLE_LIST = ["Metadata", "Variables"];
 
 var Settings_SUBCATS = {
   "general": ["SSID", "Password", "Class_Pool_Size", "Var_Pool_Size"],
-  "mqtt": ["Host", "Port", "Data_Topic", "Alert_Topic", "Username", "Password"],
+  "mqtt": ["Host", "Port", "Data_Topic", "Alert_Topic", "Mqtt_Username", "Mqtt_Password"],
   "json includes": ["Metadata", "Constraints", "Type_Unit"]
 };
-var Settings_TABLE_COLS = ["SSID", "Password", "Class_Pool_Size", "Var_Pool_Size", "Host", "Port", "Data_Topic", "Alert_Topic", "Username", "Password", "Metadata", "Constraints", "Type_Unit"];
+var Settings_TABLE_COLS = ["SSID", "Password", "Class_Pool_Size", "Var_Pool_Size", "Host", "Port", "Data_Topic", "Alert_Topic", "Mqtt_Username", "Mqtt_Password", "Metadata", "Constraints", "Type_Unit"];
 
 
 /* ======== PRELOADED XML (embedded at build time) ======== */
@@ -1052,6 +1052,22 @@ function settingsChanged() {
   if (rewind) rewind.disabled = false;
 }
 
+/* ---------- AUTO-SAVE BOOLEAN SETTING ON CHECKBOX TOGGLE ---------- */
+async function saveCheckboxSetting(el) {
+  state["Settings"][el.dataset.name] = String(el.checked);
+  if (location.hostname === "") return;
+  try {
+    const r = await fetch("/Settings.xml", {
+      method: "POST",
+      headers: { "Content-Type": "application/xml" },
+      body: settingsToXML()
+    });
+    if (!r.ok) console.error("[ACMS] Checkbox save failed (" + r.status + ")");
+  } catch(e) {
+    console.error("[ACMS] Checkbox save error:", e);
+  }
+}
+
 /* ---------- REWIND SETTINGS ---------- */
 function rewindSettings() {
   document.querySelectorAll(".settings-bar input[data-name]").forEach(function(inp) {
@@ -1107,7 +1123,8 @@ function settingsToXML() {
   var xml = "<Settings>\n";
   Object.keys(Settings_SUBCATS).forEach(function(sc) {
     var sc_val = Settings_SUBCATS[sc];
-    xml += "  <row><" + sc + ">";
+    var tag = sc.replace(/[^a-zA-Z0-9_]/g, "_");
+    xml += "  <row><" + tag + ">";
     if (Array.isArray(sc_val)) {
       sc_val.forEach(function(field) {
         var val = (state["Settings"][field] !== undefined) ? state["Settings"][field] : "";
@@ -1123,7 +1140,7 @@ function settingsToXML() {
         xml += "</" + inner_sc + ">";
       });
     }
-    xml += "</" + sc + "></row>\n";
+    xml += "</" + tag + "></row>\n";
   });
   xml += "</Settings>";
   return xml;

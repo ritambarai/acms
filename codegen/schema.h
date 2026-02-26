@@ -237,8 +237,8 @@ typedef struct {
   int32_t Port;
   char* Data_Topic;
   char* Alert_Topic;
-  char* Username;
-  char* Password;
+  char* Mqtt_Username;
+  char* Mqtt_Password;
 } settings_mqtt_t;
 
 extern settings_mqtt_t settings_mqtt;
