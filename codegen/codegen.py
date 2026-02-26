@@ -533,6 +533,7 @@ def gen_validity_js():
         "      return k.toLowerCase() === classVal.toLowerCase();\n"
         "    });\n"
         "    if (!classKey) {\n"
+        "      _typeFieldSet(input, true);\n"
         '      input.style.borderColor = "red";\n'
         '      input.classList.add("invalid");\n'
         '      errSpan.textContent = "NO MATCH";\n'
