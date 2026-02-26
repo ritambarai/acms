@@ -24,6 +24,15 @@ bool     used_var[MAX_VAR_POOL_CAP];
 int32_t dm_max_class(void) { return effective_class_pool_size(); }
 int32_t dm_max_var(void)   { return effective_var_pool_size(); }
 
+/* Guard: skip dirty on metaData class when settings_json_includes.Metadata == false */
+static void class_mark_dirty(class_t *cls)
+{
+    if (!settings_json_includes.Metadata && cls->class_name &&
+        strcmp(cls->class_name, "metaData") == 0)
+        return;
+    cls->dirty = true;
+}
+
 uint16_t last_class_idx = 0;
 uint16_t last_var_idx   = 0;
 
@@ -113,7 +122,7 @@ void insert_list_item(uint16_t class_idx,uint16_t var_idx)
         parent->head = new_var;
         
         used_var[var_idx] = true;
-        parent->dirty = true;
+        class_mark_dirty(parent);
         dirty = true;
         /* parent->var_tail unchanged */
 
@@ -162,7 +171,7 @@ void remove_from_list(uint16_t class_idx, uint16_t var_idx)
      * DIRTY FLAGS
      * -------------------------------------------------------- */
     used_var[var_idx] = false;
-    parent->dirty = true;
+    class_mark_dirty(parent);
     dirty = true;
 }
 
@@ -204,7 +213,7 @@ bool remove_variable(void *ext_addr)
     /* --------------------------------------------------------
      * MARK DIRTY
      * -------------------------------------------------------- */
-    cls->dirty = true;
+    class_mark_dirty(cls);
     dirty = true;
 
     /*Serial.print("🗑️ Removed var: ");

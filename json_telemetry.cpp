@@ -56,6 +56,12 @@ void json_add_var(uint16_t var_idx)
     //Serial.println(String("Var ID received: ") + var_idx );
     //Serial.println(String("Var used: ") + used_var[var_idx] );
     var_t   *v   = &var_pool[var_idx];
+
+    /* Skip type/unit vars when Type_Unit setting is disabled */
+    if (!settings_json_includes.Type_Unit && v->var_type &&
+        (strcmp(v->var_type, "type") == 0 || strcmp(v->var_type, "unit") == 0))
+        return;
+
     class_t *cls = &class_pool[v->class_idx];
 
     /* Get or create class array */
@@ -87,16 +93,34 @@ void json_add_var(uint16_t var_idx)
     }
 
     /* Update / overwrite fields */
-    obj["name"]          = v->var_name;
-    obj["type"]          = v->var_type ? v->var_type : "";
-    if (v->constraint_idx == INVALID_INDEX)
-        obj["constraint_id"] = nullptr;
-    else
-        obj["constraint_id"] = v->constraint_idx;
+    obj["name"]  = v->var_name;
+    obj["type"]  = v->var_type ? v->var_type : "";
 
     char val_buf[32];
     snprintf(val_buf, sizeof(val_buf), "%.2f", v->cached_val);
     obj["value"] = val_buf;
+
+    /* constraint_id: omit when disabled in settings or variable has no constraints;
+     * otherwise build array by chaining constraints_id links. */
+    obj.remove("constraint_id");
+    if (settings_json_includes.Constraints && v->constraint_idx != INVALID_INDEX) {
+        JsonArray carr = obj["constraint_id"].to<JsonArray>();
+        int cid = (int)v->constraint_idx;
+        while (cid >= 0 && cid < variables_constraints_table.count) {
+            variables_constraints_row_t *cr = &variables_constraints_table.rows[cid];
+            JsonObject elem = carr.createNestedObject();
+            char buf[32];
+            snprintf(buf, sizeof(buf), "%.2f", cr->Threshold);
+            elem["threshold"]    = buf;
+            elem["operation_id"] = (int)cr->Operation_ID;
+            elem["fault_code"]   = (int)cr->Fault_Code;
+            if (cr->Increment != 0.0f) {
+                snprintf(buf, sizeof(buf), "%.2f", cr->Increment);
+                elem["increment"] = buf;
+            }
+            cid = cr->constraints_id;
+        }
+    }
 }
 
 void json_remove_var(uint16_t var_idx)

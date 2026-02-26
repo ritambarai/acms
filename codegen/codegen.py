@@ -760,8 +760,8 @@ def gen_validity_js():
 # ═══════════════════════════════════════════════════════
 
 def c_ident(name):
-    """Ensure a name is a valid C identifier."""
-    return name.replace(" ", "_").replace("-", "_")
+    """Ensure a name is a valid C identifier (and XML element name)."""
+    return name.replace(" ", "_").replace("-", "_").replace("/", "_")
 
 
 def _gen_subcat_block(lines, t, subcat_name, subcat_fields, field_map, has_value_ptr=False, max_rows=MAX_ROWS, has_constraint_id=False, has_next_id=False):
@@ -1009,7 +1009,7 @@ def gen_c_schema_h(tables, subcategories=None, settings_subcats=None, settings_f
                         lines.append("")
                         lines.append("")
                 else:  # flat subcat: existing behaviour
-                    sl = sc_name.lower()
+                    sl = c_ident(sc_name).lower()
                     lines.append(f"/* ─── Settings / {sc_name} ─── */")
                     lines.append("")
                     lines.append("typedef struct {")
@@ -1847,7 +1847,7 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
 
             first = True
             for sc_name, sc_val in other_subcats_s.items():
-                sl = sc_name.lower()
+                sl = c_ident(sc_name).lower()
                 cond = "if" if first else "else if"
                 first = False
                 if isinstance(sc_val, dict):  # group: nested if per inner subcat

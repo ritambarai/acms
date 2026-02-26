@@ -34,16 +34,16 @@
                   <xs:element name="Data_Topic"    type="xs:string"/>
                   <xs:element name="Alert_Topic"   type="xs:string"/>
                   <xs:element name="Username"      type="xs:string"/>
-                  <xs:element name="Mqtt_Password" type="xs:string"/>
+                  <xs:element name="Password" type="xs:string"/>
                 </xs:sequence></xs:complexType>
               </xs:element>
 
               <!-- ── json includes ── -->
-              <xs:element name="json">
+              <xs:element name="json includes">
                 <xs:complexType><xs:sequence>
                   <xs:element name="Metadata"    type="xs:boolean" default="true"/>
                   <xs:element name="Constraints" type="xs:boolean" default="true"/>
-                  <xs:element name="Modbus"      type="xs:boolean" default="true"/>
+                  <xs:element name="Type_Unit"      type="xs:boolean" default="true"/>
                 </xs:sequence></xs:complexType>
               </xs:element>
 
