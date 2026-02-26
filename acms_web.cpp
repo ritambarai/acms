@@ -115,7 +115,7 @@ static void handle_get_settings_xml() {
     "<row><mqtt>"
       "<Host>%s</Host><Port>%d</Port>"
       "<Data_Topic>%s</Data_Topic><Alert_Topic>%s</Alert_Topic>"
-      "<Username>%s</Username><Mqtt_Password>%s</Mqtt_Password>"
+      "<Username>%s</Username><Password>%s</Password>"
     "</mqtt></row>\n"
     "<row><json_includes>"
       "<Metadata>%s</Metadata><Constraints>%s</Constraints><Type_Unit>%s</Type_Unit>"
@@ -130,7 +130,7 @@ static void handle_get_settings_xml() {
     settings_mqtt.Data_Topic         ? settings_mqtt.Data_Topic         : "",
     settings_mqtt.Alert_Topic        ? settings_mqtt.Alert_Topic        : "",
     settings_mqtt.Username           ? settings_mqtt.Username           : "",
-    settings_mqtt.Mqtt_Password      ? settings_mqtt.Mqtt_Password      : "",
+    settings_mqtt.Password           ? settings_mqtt.Password           : "",
     settings_json_includes.Metadata    ? "true" : "false",
     settings_json_includes.Constraints ? "true" : "false",
     settings_json_includes.Type_Unit   ? "true" : "false"

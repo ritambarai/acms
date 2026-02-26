@@ -175,11 +175,11 @@ def gen_schema_js(tables, settings_subcats=None):
                     inner_items = []
                     for inner_name, inner_fields in sc_val.items():
                         fields_str = ", ".join(f'"{f}"' for f in inner_fields)
-                        inner_items.append(f'    {inner_name}: [{fields_str}]')
-                    items.append(f'  {sc_name}: {{\n' + ',\n'.join(inner_items) + '\n  }')
+                        inner_items.append(f'    "{inner_name}": [{fields_str}]')
+                    items.append(f'  "{sc_name}": {{\n' + ',\n'.join(inner_items) + '\n  }')
                 else:  # flat: plain array
                     fields_str = ", ".join(f'"{f}"' for f in sc_val)
-                    items.append(f'  {sc_name}: [{fields_str}]')
+                    items.append(f'  "{sc_name}": [{fields_str}]')
             js += ",\n".join(items)
             js += "\n};\n"
 
@@ -1243,7 +1243,7 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                             inits.append("0")
                     lines.append(f"settings_{isl}_t settings_{isl} = {{ {', '.join(inits)} }};")
             else:  # flat subcat: existing behaviour
-                sl = sc_name.lower()
+                sl = c_ident(sc_name).lower()
                 inits = []
                 for fn in sc_val:
                     typ = field_map_s.get(fn, "string")
@@ -2851,7 +2851,8 @@ def gen_default_settings_xml(settings_subcats, settings_fields, max_rows, max_cl
 
     xml = "<Settings>\n"
     for sc_name, sc_val in other.items():
-        xml += f"<row><{sc_name}>"
+        tag = c_ident(sc_name)
+        xml += f"<row><{tag}>"
         if isinstance(sc_val, dict):  # group: wrap each inner subcat
             for inner_name, inner_fields in sc_val.items():
                 xml += f"<{inner_name}>"
@@ -2861,7 +2862,7 @@ def gen_default_settings_xml(settings_subcats, settings_fields, max_rows, max_cl
         else:  # flat subcat
             for fn in sc_val:
                 xml += f"<{fn}>{_field_val(fn)}</{fn}>"
-        xml += f"</{sc_name}></row>\n"
+        xml += f"</{tag}></row>\n"
     xml += "</Settings>"
     return xml
 

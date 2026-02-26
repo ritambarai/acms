@@ -21,7 +21,7 @@ variables_modbus_table_t variables_modbus_table = { .count = 0, .version = 0 };
 variables_constraints_table_t variables_constraints_table = { .count = 0, .version = 0 };
 settings_general_t settings_general = { NULL, NULL, 0, 0 };
 settings_mqtt_t settings_mqtt = { NULL, 0, NULL, NULL, NULL, NULL };
-settings_json includes_t settings_json includes = { false, false, false };
+settings_json_includes_t settings_json_includes = { false, false, false };
 
 /* ── extract value between <tag>…</tag> or detect <tag/> ── */
 static bool extract_tag(const char *xml, const char *tag, char *buf, int buflen) {
