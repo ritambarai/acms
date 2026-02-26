@@ -208,6 +208,7 @@ th.row-actions {
   color: #cc6600;
   cursor: pointer;
   font-weight: bold;
+  margin-right: 6px;
 }
 
 /* ===== BUTTON ===== */
@@ -620,9 +621,9 @@ var Variables_SCHEMA = [
 var TABLE_LIST = ["Metadata", "Variables"];
 
 var Settings_SUBCATS = {
-  general: ["SSID", "Password", "Class_Pool_Size", "Var_Pool_Size"],
-  mqtt: ["Host", "Port", "Data_Topic", "Alert_Topic", "Username", "Password"],
-  json includes: ["Metadata", "Constraints", "Type_Unit"]
+  "general": ["SSID", "Password", "Class_Pool_Size", "Var_Pool_Size"],
+  "mqtt": ["Host", "Port", "Data_Topic", "Alert_Topic", "Username", "Password"],
+  "json includes": ["Metadata", "Constraints", "Type_Unit"]
 };
 var Settings_TABLE_COLS = ["SSID", "Password", "Class_Pool_Size", "Var_Pool_Size", "Host", "Port", "Data_Topic", "Alert_Topic", "Username", "Password", "Metadata", "Constraints", "Type_Unit"];
 
