@@ -409,6 +409,7 @@ static void modbus_task(void *pvParameters)
         for (int i = 0; i < variables_modbus_table.count; i++) {
             modbus_poll_row(i);
         }
+        sync_all_nochange();
         vTaskDelay(pdMS_TO_TICKS(MODBUS_POLL_INTERVAL_MS));
     }
 }

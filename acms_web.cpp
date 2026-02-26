@@ -14,6 +14,8 @@ extern "C" {
 #include "web_page.h"
 #include "xml_defaults.h"
 
+#define INCREMENT_LOOP_INTERVAL_MS  1000
+
 /* xml_parser.cpp functions */
 extern int  load_variables_from_spiffs(void);
 extern int  load_metadata_from_spiffs(void);
@@ -33,25 +35,13 @@ static bool     reboot_pending = false;
 static uint32_t reboot_at      = 0;
 
 /* =========================================================
- * SENSOR VARIABLES (global lifetime — registered by pointer)
- * ========================================================= */
-
-static float temperature = 25.5f;
-static float pressure    = 101.3f;
-static float humidity    = 60.0f;
-static float voltage     = 3.3f;
-static float online      = 1.0f;
-
-/* Cached class indices — filled once in acms_system_init() */
-static uint16_t cls_sensor = INVALID_INDEX;
-static uint16_t cls_power  = INVALID_INDEX;
-
-/* =========================================================
  * ADDRESS POOL (STABLE BACKING STORAGE FOR ext_addr)
  * ========================================================= */
 
 float addr_pool[MAX_VAR_POOL];
 static uint16_t last_idx = 0;
+
+increment_pool_t increment_pool = {0};
 
 /* =========================================================
  * WEB SERVER
@@ -225,6 +215,40 @@ void acms_web_loop(void)
   server.handleClient();
 }
 
+static void http_task(void *pvParameters)
+{
+    for (;;) {
+        server.handleClient();
+        if (reboot_pending && millis() >= reboot_at) {
+            ESP.restart();
+        }
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+}
+
+/* =========================================================
+ * INCREMENT TASK — FreeRTOS task, started from acms_system_init()
+ * Iterates every constraints table row, adds Increment to *value_ptr,
+ * calls update_variable, then sync_all_nochange after each full pass.
+ * ========================================================= */
+
+static void increment_task(void *pvParameters)
+{
+    for (;;) {
+        for (int i = 0; i < increment_pool.count; i++) {
+            increment_pool_row_t *r = &increment_pool.rows[i];
+            if (r->value_ptr == NULL) continue;
+            float old_val = *r->value_ptr;
+            *r->value_ptr += r->Increment;
+            Serial.printf("[Increment] [%d] old=%.4f  inc=%.4f  new=%.4f\n",
+                          i, old_val, r->Increment, *r->value_ptr);
+            update_variable(r->value_ptr);
+        }
+        sync_all_nochange();
+        vTaskDelay(pdMS_TO_TICKS(INCREMENT_LOOP_INTERVAL_MS));
+    }
+}
+
 /* =========================================================
  * SYSTEM INIT — call once from setup()
  * ========================================================= */
@@ -278,31 +302,14 @@ void acms_system_init(const char *login_user, const char *login_pass)
   }
   Serial.println();
 
-  /* ---------------- Register sensor variables (ONCE) ---------------- */
-  {
-    variables_description_row_t row;
-    row.constraint_id = -1;
+  /* increment_pool is populated by load_variables_from_spiffs() during XML parsing
+   * (only rows where Increment is non-null are included). */
+  Serial.printf("[Increment] Pool has %d row(s)\n", increment_pool.count);
 
-    row.Class = (char*)"Sensor"; row.Name = (char*)"Temp";     row.Type = (char*)"float"; row.Value = temperature;
-    dm_set_value(&row, &temperature);
-
-    row.Class = (char*)"Sensor"; row.Name = (char*)"Pressure"; row.Type = (char*)"float"; row.Value = pressure;
-    dm_set_value(&row, &pressure);
-
-    row.Class = (char*)"Sensor"; row.Name = (char*)"Humidity"; row.Type = (char*)"float"; row.Value = humidity;
-    dm_set_value(&row, &humidity);
-
-    row.Class = (char*)"Power"; row.Name = (char*)"Status";  row.Type = (char*)"bool";  row.Value = online;
-    dm_set_value(&row, &online);
-
-    row.Class = (char*)"Power"; row.Name = (char*)"Voltage"; row.Type = (char*)"float"; row.Value = voltage;
-    dm_set_value(&row, &voltage);
-  }
   sync_all();
 
-  /* Cache class indices for use in loop */
-  cls_sensor = dm_class_map_find("Sensor");
-  cls_power  = dm_class_map_find("Power");
+  xTaskCreate(increment_task, "increment", 4096, NULL, 1, NULL);
+  xTaskCreatePinnedToCore(http_task, "http", 8192, NULL, 2, NULL, 1);
 
   Serial.println("Variables registered");
 }
@@ -313,50 +320,5 @@ void acms_system_init(const char *login_user, const char *login_pass)
 
 void acms_system_loop(void)
 {
-  /* Always service HTTP — runs on every loop iteration */
-  acms_web_loop();
-
-  if (reboot_pending && millis() >= reboot_at) {
-    ESP.restart();
-  }
-
-  /* Sensor simulation + sync runs every 2 s, non-blocking */
-  static uint32_t last_sync = 0;
-  if (millis() - last_sync < 2000) return;
-  last_sync = millis();
-
-  /* ---------------- Simulate sensor changes ---------------- */
-  temperature += 0.25f;
-  if (temperature > 55.5f) temperature = 25.5f;
-
-  pressure += 0.10f;
-  if (pressure > 181.3f) pressure = 101.3f;
-
-  humidity += 0.05f;
-  if (humidity > 100.0f) humidity = 60.0f;
-
-  /* ---------------- Update + sync Sensor class ---------------- */
-  update_variable(&temperature);
-  update_variable(&pressure);
-  update_variable(&humidity);
-
-  if (cls_sensor != INVALID_INDEX) {
-    sync_class(cls_sensor);
-  }
-
-  acms_web_loop();
-
-  /* ---------------- Simulate power changes ---------------- */
-  voltage += 0.01f;
-  if (voltage > 13.3f) voltage = 3.3f;
-
-  online = (online > 0.5f) ? 0.0f : 1.0f;
-
-  /* ---------------- Update + sync Power class ---------------- */
-  update_variable(&voltage);
-  update_variable(&online);
-
-  if (cls_power != INVALID_INDEX) {
-    sync_class(cls_power);
-  }
+  vTaskDelay(pdMS_TO_TICKS(10));  /* yield — HTTP, increment, modbus run in their own tasks */
 }
