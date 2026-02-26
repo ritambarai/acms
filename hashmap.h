@@ -83,11 +83,12 @@ uint16_t dm_var_map_find(uint16_t class_idx, const char *var_name,const char *va
 
 void dm_var_map_prepare(uint16_t class_idx,
                         const char *var_name,
+                        const char *var_type,
                         uint16_t    var_idx);
 
 void dm_var_map_commit(void);
 
-bool dm_var_map_delete(uint16_t class_idx, const char *var_name);
+bool dm_var_map_delete(uint16_t class_idx, const char *var_name, const char *var_type);
 
 /* ============================================================
  *  ADDR MAP : ext_addr → var_idx

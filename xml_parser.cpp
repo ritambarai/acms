@@ -150,30 +150,38 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
     memcpy(row_buf, row_start, row_len);
     row_buf[row_len] = '\0';
 
-    /* ── description ── */
+    /* ── description: extract into temps for hashmap pre-check ── */
+    char _t_Class[256] = "";
+    char _t_Name[256] = "";
+    char _t_Type[256] = "";
+    float _t_Value = -9999.0f;
+
     extract_tag(row_buf, "Class", buf, sizeof(buf));
     if (buf[0] && !validate_variables_description_value(COL_VARIABLES_DESCRIPTION_CLASS_STRING, buf)) {
       pos = row_end + 6; continue;
     }
-    description_tbl->rows[description_count].Class = buf[0] ? strdup(buf) : NULL;
+    if (buf[0]) { strncpy(_t_Class, buf, sizeof(_t_Class)-1); _t_Class[sizeof(_t_Class)-1] = '\0'; }
+    else _t_Class[0] = '\0';
 
     extract_tag(row_buf, "Name", buf, sizeof(buf));
     if (buf[0] && !validate_variables_description_value(COL_VARIABLES_DESCRIPTION_NAME_STRING, buf)) {
       pos = row_end + 6; continue;
     }
-    description_tbl->rows[description_count].Name = buf[0] ? strdup(buf) : NULL;
+    if (buf[0]) { strncpy(_t_Name, buf, sizeof(_t_Name)-1); _t_Name[sizeof(_t_Name)-1] = '\0'; }
+    else _t_Name[0] = '\0';
 
     extract_tag(row_buf, "Type", buf, sizeof(buf));
     if (buf[0] && !validate_variables_description_value(COL_VARIABLES_DESCRIPTION_TYPE_STRING, buf)) {
       pos = row_end + 6; continue;
     }
-    description_tbl->rows[description_count].Type = buf[0] ? strdup(buf) : NULL;
+    if (buf[0]) { strncpy(_t_Type, buf, sizeof(_t_Type)-1); _t_Type[sizeof(_t_Type)-1] = '\0'; }
+    else _t_Type[0] = '\0';
 
     extract_tag(row_buf, "Value", buf, sizeof(buf));
     if (buf[0] && !validate_variables_description_value(COL_VARIABLES_DESCRIPTION_VALUE_FLOAT, buf)) {
       pos = row_end + 6; continue;
     }
-    description_tbl->rows[description_count].Value = buf[0] ? (float)atof(buf) : -9999.0f;
+    _t_Value = buf[0] ? (float)atof(buf) : -9999.0f;
 
     /* ── modbus: parse into temporaries, commit only if any field is non-default ── */
     float _t_Slave_ID, _t_Function_ID, _t_Start_Address, _t_Data_Length;
@@ -229,15 +237,21 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
     }
     _t_Increment = buf[0] ? (float)atof(buf) : -9999.0f;
 
-    /* ── hashmap lookup: check if var already registered ── */
+    /* ── hashmap lookup using temps: check if var already registered ── */
     uint16_t _cls_idx = INVALID_INDEX;
     uint16_t _var_pool_id = INVALID_INDEX;
-    if (description_tbl->rows[description_count].Class && description_tbl->rows[description_count].Name && description_tbl->rows[description_count].Type) {
-      _cls_idx = dm_class_map_find(description_tbl->rows[description_count].Class);
+    if (_t_Class[0] && _t_Name[0] && _t_Type[0]) {
+      _cls_idx = dm_class_map_find(_t_Class);
       if (_cls_idx != INVALID_INDEX)
-        _var_pool_id = dm_var_map_find(_cls_idx, description_tbl->rows[description_count].Name, description_tbl->rows[description_count].Type);
+        _var_pool_id = dm_var_map_find(_cls_idx, _t_Name, _t_Type);
     }
     if (_var_pool_id == INVALID_INDEX) {
+      /* copy temps → desc row (only for new vars) */
+      description_tbl->rows[description_count].Class = _t_Class[0] ? strdup(_t_Class) : NULL;
+      description_tbl->rows[description_count].Name = _t_Name[0] ? strdup(_t_Name) : NULL;
+      description_tbl->rows[description_count].Type = _t_Type[0] ? strdup(_t_Type) : NULL;
+      description_tbl->rows[description_count].Value = _t_Value;
+
       if (_t_Slave_ID != -9999.0f || _t_Function_ID != -9999.0f || _t_Start_Address != -9999.0f || _t_Data_Length != -9999.0f) {
         /* at least one modbus field is real — commit this row */
         modbus_tbl->rows[modbus_count].Slave_ID = _t_Slave_ID;
@@ -260,6 +274,8 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
         description_tbl->rows[description_count].constraint_id = constraints_count;
         if (_t_Increment != -9999.0f) {
           increment_pool.rows[increment_pool.count].Increment = _t_Increment;
+          increment_pool.rows[increment_pool.count].ini_val   = description_tbl->rows[description_count].Value;
+          increment_pool.rows[increment_pool.count].threshold = _t_Threshold;
           increment_pool.rows[increment_pool.count].value_ptr = &description_tbl->rows[description_count].Value;
           increment_pool.count++;
         }
@@ -271,7 +287,24 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
       dm_set_value(&description_tbl->rows[description_count],
                    &description_tbl->rows[description_count].Value);
 
+      /* sync var_pool.constraint_idx so duplicate rows can chain onto this */
+      {
+        uint16_t _new_cls = dm_class_map_find(description_tbl->rows[description_count].Class);
+        if (_new_cls != INVALID_INDEX) {
+          uint16_t _new_vid = dm_var_map_find(_new_cls, description_tbl->rows[description_count].Name, description_tbl->rows[description_count].Type);
+          if (_new_vid != INVALID_INDEX && description_tbl->rows[description_count].constraint_id != -1)
+            var_pool[_new_vid].constraint_idx = description_tbl->rows[description_count].constraint_id;
+        }
+      }
+
       Serial.printf("[%d] Class=%s  Name=%s  Type=%s  Value=%.4f  constraint_id=%d\n", description_count, description_tbl->rows[description_count].Class ? description_tbl->rows[description_count].Class : "(null)", description_tbl->rows[description_count].Name ? description_tbl->rows[description_count].Name : "(null)", description_tbl->rows[description_count].Type ? description_tbl->rows[description_count].Type : "(null)", description_tbl->rows[description_count].Value, description_tbl->rows[description_count].constraint_id);
+      {
+        int _cid = description_tbl->rows[description_count].constraint_id;
+        while (_cid != -1) {
+          Serial.printf("    C[%d] Operation_ID=%.4f  Threshold=%.4f  Fault_Code=%.4f  Increment=%.4f\n", _cid, constraints_tbl->rows[_cid].Operation_ID, constraints_tbl->rows[_cid].Threshold, constraints_tbl->rows[_cid].Fault_Code, constraints_tbl->rows[_cid].Increment);
+          _cid = constraints_tbl->rows[_cid].constraints_id;
+        }
+      }
 
       description_count++;
     } else {
@@ -293,6 +326,8 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
         }
         if (_t_Increment != -9999.0f) {
           increment_pool.rows[increment_pool.count].Increment = _t_Increment;
+          increment_pool.rows[increment_pool.count].ini_val   = *(float *)var_pool[_var_pool_id].ext_addr;
+          increment_pool.rows[increment_pool.count].threshold = _t_Threshold;
           increment_pool.rows[increment_pool.count].value_ptr = (float *)var_pool[_var_pool_id].ext_addr;
           increment_pool.count++;
         }

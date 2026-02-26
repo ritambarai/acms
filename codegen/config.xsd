@@ -72,7 +72,17 @@
                 </xs:sequence></xs:complexType>
               </xs:element>
 
-              <!-- ── constraints ── -->
+             <!-- ── modbus ── -->
+              <xs:element name="modbus">
+                <xs:complexType><xs:sequence>
+                  <xs:element name="Slave_ID"      type="xs:float"/>
+                  <xs:element name="Function_ID"   type="xs:float"/>
+                  <xs:element name="Start_Address" type="xs:float"/>
+                  <xs:element name="Data_Length"   type="xs:float"/>
+                </xs:sequence></xs:complexType>
+              </xs:element>
+              
+               <!-- ── constraints ── -->
               <xs:element name="constraints">
                 <xs:complexType><xs:sequence>
                   <xs:element name="Operation_ID" type="xs:float"/>
@@ -82,15 +92,7 @@
                 </xs:sequence></xs:complexType>
               </xs:element>
 
-              <!-- ── modbus ── -->
-              <xs:element name="modbus">
-                <xs:complexType><xs:sequence>
-                  <xs:element name="Slave_ID"      type="xs:float"/>
-                  <xs:element name="Function_ID"   type="xs:float"/>
-                  <xs:element name="Start_Address" type="xs:float"/>
-                  <xs:element name="Data_Length"   type="xs:float"/>
-                </xs:sequence></xs:complexType>
-              </xs:element>
+              
 
             </xs:sequence>
           </xs:complexType>

@@ -92,12 +92,12 @@ typedef struct var_s {
 
 #define VAR_INIT(idx)    ((var_t){        \
     .var_name       = NULL,               \
+    .var_type       = NULL,               \
     .var_idx        = (idx),              \
     .class_idx      = 0,                  \
     .constraint_idx = INVALID_INDEX,      \
     .ext_addr       = NULL,               \
     .cached_val     = 0,                  \
-    .var_type       = NULL,               \
     .prev           = DM_PTR_NULL,        \
     .next           = DM_PTR_NULL         \
 })

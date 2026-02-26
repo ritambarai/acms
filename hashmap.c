@@ -1,6 +1,7 @@
 #include "hashmap.h"
 #include <string.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 /* ============================================================
  *  HASH FUNCTIONS (fast, deterministic)
@@ -37,7 +38,7 @@ typedef struct {
 
 typedef struct {
     uint16_t    class_idx;
-    const char *var_name;
+    char       *var_name;   /* malloc'd composite "name_type" — freed on delete */
     uint16_t    idx;
     map_state_t state;
 } var_map_entry_t;
@@ -187,10 +188,20 @@ uint16_t dm_var_map_find(uint16_t class_idx,
 
 void dm_var_map_prepare(uint16_t class_idx,
                         const char *var_name,
+                        const char *var_type,
                         uint16_t    var_idx)
 {
+    /* Build composite key "name_type" — same layout as dm_var_map_find. */
+    size_t n1 = strlen(var_name), n2 = strlen(var_type);
+    char *ckey = (char *)malloc(n1 + 1 + n2 + 1);
+    if (ckey) {
+        memcpy(ckey, var_name, n1);
+        ckey[n1] = '_';
+        memcpy(ckey + n1 + 1, var_type, n2);
+        ckey[n1 + 1 + n2] = '\0';
+    }
     var_stage.class_idx = class_idx;
-    var_stage.var_name  = var_name;
+    var_stage.var_name  = ckey;   /* owns this allocation */
     var_stage.idx       = var_idx;
     var_stage.state     = MAP_USED;
     var_stage_valid     = true;
@@ -214,9 +225,18 @@ void dm_var_map_commit(void)
     var_stage_valid = false;
 }
 
-bool dm_var_map_delete(uint16_t class_idx, const char *var_name)
+bool dm_var_map_delete(uint16_t class_idx, const char *var_name, const char *var_type)
 {
-    uint32_t h = hash_str(var_name) ^ class_idx;
+    char key[64];
+    size_t n1 = strlen(var_name), n2 = strlen(var_type);
+    if (n1 + 1 + n2 + 1 > sizeof(key))
+        return false;
+    memcpy(key, var_name, n1);
+    key[n1] = '_';
+    memcpy(key + n1 + 1, var_type, n2);
+    key[n1 + 1 + n2] = '\0';
+
+    uint32_t h = hash_str(key) ^ class_idx;
     uint32_t b = h & (VAR_MAP_SIZE - 1);
 
     for (uint32_t i = 0; i < VAR_MAP_SIZE; i++) {
@@ -225,7 +245,10 @@ bool dm_var_map_delete(uint16_t class_idx, const char *var_name)
             return false;
         if (var_map[p].state == MAP_USED &&
             var_map[p].class_idx == class_idx &&
-            strcmp(var_map[p].var_name, var_name) == 0) {
+            var_map[p].var_name != NULL &&
+            strcmp(var_map[p].var_name, key) == 0) {
+            free(var_map[p].var_name);
+            var_map[p].var_name = NULL;
             var_map[p].state = MAP_TOMBSTONE;
             return true;
         }
