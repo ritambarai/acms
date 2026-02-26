@@ -30,6 +30,13 @@ function validateField(input) {
       break;
   }
 
+  /* max-value check (pool-size fields carry a max= attribute) */
+  if (!msg && input.hasAttribute('max')) {
+    const maxVal = parseInt(input.getAttribute('max'), 10);
+    const numVal = parseInt(v, 10);
+    if (!isNaN(numVal) && numVal > maxVal) msg = 'Must be ≤ ' + maxVal;
+  }
+
   if (msg) {
     input.classList.add("invalid");
     errSpan.textContent = msg;

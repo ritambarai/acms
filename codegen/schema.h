@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
+#include "hashmap.h"
 
 /* ═══════ Metadata ═══════ */
 
@@ -32,7 +33,7 @@ typedef struct {
   char* Message;
 } metadata_row_t;
 
-#define MAX_METADATA_ROWS 128
+#define MAX_METADATA_ROWS MAX_VAR_POOL_CAP
 
 typedef struct {
   metadata_row_t rows[MAX_METADATA_ROWS];
@@ -85,7 +86,7 @@ typedef struct {
   int constraint_id;   /* index into constraints table, -1 if no constraints row */
 } variables_description_row_t;
 
-#define MAX_VARIABLES_DESCRIPTION_ROWS 128
+#define MAX_VARIABLES_DESCRIPTION_ROWS MAX_VAR_POOL_CAP
 
 typedef struct {
   variables_description_row_t rows[MAX_VARIABLES_DESCRIPTION_ROWS];
@@ -136,7 +137,7 @@ typedef struct {
   float *value_ptr;   /* points to description struct Value field */
 } variables_modbus_row_t;
 
-#define MAX_VARIABLES_MODBUS_ROWS 128
+#define MAX_VARIABLES_MODBUS_ROWS MAX_VAR_POOL_CAP
 
 typedef struct {
   variables_modbus_row_t rows[MAX_VARIABLES_MODBUS_ROWS];
@@ -191,7 +192,7 @@ typedef struct {
   int constraints_id;  /* next constraints row for this variable, -1 = none */
 } variables_constraints_row_t;
 
-#define MAX_VARIABLES_CONSTRAINTS_ROWS 128
+#define MAX_VARIABLES_CONSTRAINTS_ROWS MAX_VAR_POOL_CAP
 
 typedef struct {
   variables_constraints_row_t rows[MAX_VARIABLES_CONSTRAINTS_ROWS];
@@ -257,9 +258,15 @@ extern settings_json_t settings_json;
 /* ── Runtime pool-size accessors (defaults when struct value is 0) ── */
 
 static inline int32_t effective_var_pool_size(void) {
-  return settings_general.Var_Pool_Size > 0 ? settings_general.Var_Pool_Size : 128;
+  int32_t v = settings_general.Var_Pool_Size;
+  if (v <= 0)              v = MAX_VAR_POOL_CAP;
+  if (v > MAX_VAR_POOL_CAP) v = MAX_VAR_POOL_CAP;
+  return v;
 }
 
 static inline int32_t effective_class_pool_size(void) {
-  return settings_general.Class_Pool_Size > 0 ? settings_general.Class_Pool_Size : 32;
+  int32_t v = settings_general.Class_Pool_Size;
+  if (v <= 0)                v = MAX_CLASS_POOL_CAP;
+  if (v > MAX_CLASS_POOL_CAP) v = MAX_CLASS_POOL_CAP;
+  return v;
 }

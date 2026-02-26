@@ -106,11 +106,11 @@ typedef struct var_s {
  *  GLOBAL POOLS (DEFINED IN data_manager.c)
  * ============================================================ */
 
-extern class_t class_pool[MAX_CLASS_CAP];
-extern bool    used_class[MAX_CLASS_CAP];
+extern class_t class_pool[MAX_CLASS_POOL_CAP];
+extern bool    used_class[MAX_CLASS_POOL_CAP];
 
-extern var_t   var_pool[MAX_VAR_CAP];
-extern bool    used_var[MAX_VAR_CAP];
+extern var_t   var_pool[MAX_VAR_POOL_CAP];
+extern bool    used_var[MAX_VAR_POOL_CAP];
 
 /* ============================================================
  *  GLOBAL CURSORS (MONOTONIC, NEVER REUSED)

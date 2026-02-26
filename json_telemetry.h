@@ -3,12 +3,13 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "hashmap.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define MAX_REMOTE_VARS 64
+#define MAX_REMOTE_VARS MAX_VAR_POOL_CAP
 
 /* --------------------------------------------------------
  * JSON BUILDING (USED BY DATA MANAGER SYNC)

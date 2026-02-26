@@ -165,6 +165,18 @@ th {
   background: #eee;
 }
 
+.row-actions-left {
+  position: sticky;
+  left: 0;
+  background: #fff;
+  white-space: nowrap;
+  border-right: 2px solid #bbb;
+}
+
+th.row-actions-left {
+  background: #eee;
+}
+
 .row-actions {
   position: sticky;
   right: 0;
@@ -187,7 +199,12 @@ th.row-actions {
   color: #0066cc;
   cursor: pointer;
   font-weight: bold;
-  margin-right: 6px;
+}
+
+.edit-row {
+  color: #cc6600;
+  cursor: pointer;
+  font-weight: bold;
 }
 
 /* ===== BUTTON ===== */
@@ -230,6 +247,29 @@ button {
   font-size: 11px;
   white-space: nowrap;
   align-self: flex-end;
+}
+
+.settings-btn-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  justify-content: center;
+  margin: 8px auto;
+}
+
+.settings-btn-row button {
+  display: inline-block;
+  margin: 0;
+}
+
+.settings-rewind-btn {
+  padding: 0;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  aspect-ratio: 1;
+  line-height: 1;
 }
 
 .settings-checkbox {
@@ -308,6 +348,9 @@ button {
 var PRELOAD_XML = {
 %PRELOAD_XML%
 };
+
+/* ======== PRELOADED SETTINGS (embedded at build time, PC only) ======== */
+var PRELOAD_SETTINGS = %PRELOAD_SETTINGS%;
 
 /* ======== STABLE JS LOGIC (INJECTED FROM CODEGEN) ======== */
 %STABLE_JS%

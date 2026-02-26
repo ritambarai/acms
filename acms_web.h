@@ -3,13 +3,14 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "hashmap.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define MAX_VAR_POOL       256
-#define MAX_INCREMENT_ROWS 128
+#define MAX_VAR_POOL       MAX_VAR_POOL_CAP
+#define MAX_INCREMENT_ROWS MAX_VAR_POOL_CAP
 
 typedef struct {
   float  Increment;

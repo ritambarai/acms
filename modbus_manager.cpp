@@ -334,6 +334,8 @@ float modbus_regs_to_float(uint16_t hi, uint16_t lo)
 
 static void modbus_task(void *pvParameters);   /* forward declaration */
 
+extern bool check_variable_constraints(uint16_t var_pool_id);
+
 /* ═══════════════════════════════════════════════════════════════
  *  PUBLIC: modbus_setup — call once from setup()
  * ════════════════════════════════════════════════════════════ */
@@ -396,6 +398,9 @@ static void modbus_poll_row(int row)
             else                          val = (float)Float_Data_04[0];
             *r->value_ptr = val;
             update_variable(r->value_ptr);
+            uint16_t _vpid = dm_addr_map_find(r->value_ptr);
+            if (_vpid != INVALID_INDEX)
+                check_variable_constraints(_vpid);
         }
     }
 }
