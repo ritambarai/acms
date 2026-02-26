@@ -143,6 +143,13 @@ body {
   margin-top: 10px;
 }
 
+#Variables_section .table-wrap,
+#Metadata_section .table-wrap {
+  flex: none;
+  max-height: 341px;  /* ~10 data rows + header */
+  overflow-y: scroll;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

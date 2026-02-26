@@ -143,6 +143,13 @@ body {
   margin-top: 10px;
 }
 
+#Variables_section .table-wrap,
+#Metadata_section .table-wrap {
+  flex: none;
+  max-height: 341px;  /* ~10 data rows + header */
+  overflow-y: scroll;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -574,8 +581,8 @@ var Settings_TABLE_COLS = ["SSID", "Password", "Class_Pool_Size", "Var_Pool_Size
 
 /* ======== PRELOADED XML (embedded at build time) ======== */
 var PRELOAD_XML = {
-  "Metadata": "<Metadata>\n<row><Class>type</Class><Key>0</Key><Message>choice</Message></row>\n<row><Class>type</Class><Key>1</Key><Message>numeric</Message></row>\n<row><Class>pressure</Class><Key>1</Key><Message>bar</Message></row>\n<row><Class>Operation_ID</Class><Key>1</Key><Message>Less than</Message></row>\n<row><Class>Operation_ID</Class><Key>2</Key><Message>Greater than</Message></row>\n<row><Class>Operation_ID</Class><Key>3</Key><Message>Greater than/ Equals to</Message></row>\n<row><Class>Operation_ID</Class><Key>4</Key><Message>Less than/ Equals to</Message></row>\n<row><Class>Operation_ID</Class><Key>0</Key><Message>Equals to</Message></row>\n<row><Class>Operation_ID</Class><Key>5</Key><Message>Not Equals to</Message></row>\n<row><Class>level</Class><Key>1</Key><Message>Percentage(%)</Message></row>\n<row><Class>status</Class><Key>0</Key><Message>OFF</Message></row>\n<row><Class>status</Class><Key>1</Key><Message>ON</Message></row>\n<row><Class>mode</Class><Key>0</Key><Message>AUTO</Message></row>\n<row><Class>mode</Class><Key>1</Key><Message>MANUAL</Message></row>\n<row><Class>level</Class><Key>1</Key><Message>meter</Message></row>\n<row><Class>trip</Class><Key>0</Key><Message>FALSE</Message></row>\n<row><Class>trip</Class><Key>1</Key><Message>TRUE</Message></row>\n<row><Class>Fault_Code</Class><Key>201</Key><Message>Low Level</Message></row>\n<row><Class>Fault_Code</Class><Key>401</Key><Message>Low Pressure</Message></row>\n<row><Class>Fault_Code</Class><Key>402</Key><Message>High Pressure</Message></row>\n<row><Class>Fault_Code</Class><Key>100</Key><Message>Fault</Message></row>\n<row><Class>voltage</Class><Key>1</Key><Message>Volts(V)</Message></row>\n<row><Class>Fault_Code</Class><Key>301</Key><Message>Over Voltage</Message></row>\n<row><Class>Fault_Code</Class><Key>302</Key><Message>Under Voltage</Message></row>\n<row><Class>Fault_Code</Class><Key>101</Key><Message>Fault</Message></row>\n</Metadata>",
-  "Variables": "<Variables>\n<row><Class>pumps</Class><Type>type</Type><Name>voltage</Name><Value>1</Value><Operation_ID/><Threshold/><Fault_Code/><Increment/><Slave_ID/><Function_ID/><Start_Address/><Data_Length/></row>\n<row><Class>pumps</Class><Type>unit</Type><Name>voltage</Name><Value>1</Value><Operation_ID/><Threshold/><Fault_Code/><Increment/><Slave_ID/><Function_ID/><Start_Address/><Data_Length/></row>\n<row><Class>pumps</Class><Type>main</Type><Name>voltage</Name><Value>240</Value><Operation_ID>2</Operation_ID><Threshold>270</Threshold><Fault_Code>301</Fault_Code><Increment/><Slave_ID/><Function_ID/><Start_Address/><Data_Length/></row>\n<row><Class>pumps</Class><Type>main</Type><Name>voltage</Name><Value>240</Value><Operation_ID>1</Operation_ID><Threshold>200</Threshold><Fault_Code>302</Fault_Code><Increment/><Slave_ID/><Function_ID/><Start_Address/><Data_Length/></row>\n<row><Class>pumps</Class><Type>type</Type><Name>status</Name><Value>0</Value><Operation_ID/><Threshold/><Fault_Code/><Increment/><Slave_ID/><Function_ID/><Start_Address/><Data_Length/></row>\n<row><Class>pumps</Class><Type>type</Type><Name>mode</Name><Value>0</Value><Operation_ID/><Threshold/><Fault_Code/><Increment/><Slave_ID/><Function_ID/><Start_Address/><Data_Length/></row>\n<row><Class>pumps</Class><Type>type</Type><Name>trip</Name><Value>0</Value><Operation_ID/><Threshold/><Fault_Code/><Increment/><Slave_ID/><Function_ID/><Start_Address/><Data_Length/></row>\n<row><Class>pumps</Class><Type>jockey</Type><Name>voltage</Name><Value>240</Value><Operation_ID>2</Operation_ID><Threshold>270</Threshold><Fault_Code>301</Fault_Code><Increment/><Slave_ID/><Function_ID/><Start_Address/><Data_Length/></row>\n<row><Class>pumps</Class><Type>jockey</Type><Name>voltage</Name><Value>240</Value><Operation_ID>1</Operation_ID><Threshold>200</Threshold><Fault_Code>302</Fault_Code><Increment/><Slave_ID/><Function_ID/><Start_Address/><Data_Length/></row>\n</Variables>"
+  "Metadata": "<Metadata>\n<row><Class>Fault_Code</Class><Key>100</Key><Message>Fault</Message></row>\n<row><Class>Fault_Code</Class><Key>101</Key><Message>Fault</Message></row>\n<row><Class>Fault_Code</Class><Key>201</Key><Message>Low Level</Message></row>\n<row><Class>Fault_Code</Class><Key>301</Key><Message>Over Voltage</Message></row>\n<row><Class>Fault_Code</Class><Key>302</Key><Message>Under Voltage</Message></row>\n<row><Class>Fault_Code</Class><Key>401</Key><Message>Low Pressure</Message></row>\n<row><Class>Fault_Code</Class><Key>402</Key><Message>High Pressure</Message></row>\n<row><Class>level</Class><Key>1</Key><Message>Percentage(%)</Message></row>\n<row><Class>level</Class><Key>1</Key><Message>meter</Message></row>\n<row><Class>mode</Class><Key>0</Key><Message>AUTO</Message></row>\n<row><Class>mode</Class><Key>1</Key><Message>MANUAL</Message></row>\n<row><Class>Operation_ID</Class><Key>0</Key><Message>Equals to</Message></row>\n<row><Class>Operation_ID</Class><Key>1</Key><Message>Less than</Message></row>\n<row><Class>Operation_ID</Class><Key>2</Key><Message>Greater than</Message></row>\n<row><Class>Operation_ID</Class><Key>3</Key><Message>Greater than/ Equals to</Message></row>\n<row><Class>Operation_ID</Class><Key>4</Key><Message>Less than/ Equals to</Message></row>\n<row><Class>Operation_ID</Class><Key>5</Key><Message>Not Equals to</Message></row>\n<row><Class>pressure</Class><Key>1</Key><Message>bar</Message></row>\n<row><Class>status</Class><Key>0</Key><Message>OFF</Message></row>\n<row><Class>status</Class><Key>1</Key><Message>ON</Message></row>\n<row><Class>trip</Class><Key>0</Key><Message>FALSE</Message></row>\n<row><Class>trip</Class><Key>1</Key><Message>TRUE</Message></row>\n<row><Class>type</Class><Key>0</Key><Message>choice</Message></row>\n<row><Class>type</Class><Key>1</Key><Message>numeric</Message></row>\n<row><Class>voltage</Class><Key>1</Key><Message>Volts(V)</Message></row>\n</Metadata>",
+  "Variables": "<Variables>\n<row><Class>pumps</Class><Name>mode</Name><Type>type</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>mode</Name><Type>booster</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>mode</Name><Type>jockey</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>mode</Name><Type>main</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>status</Name><Type>type</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>status</Name><Type>booster</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>status</Name><Type>jockey</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>status</Name><Type>main</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>trip</Name><Type>type</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>voltage</Name><Type>type</Type><Value>1</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>voltage</Name><Type>unit</Type><Value>1</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>voltage</Name><Type>jockey</Type><Value>240</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>2</Operation_ID><Threshold>270</Threshold><Fault_Code>301</Fault_Code><Increment/></row>\n<row><Class>pumps</Class><Name>voltage</Name><Type>jockey</Type><Value>240</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>1</Operation_ID><Threshold>200</Threshold><Fault_Code>302</Fault_Code><Increment/></row>\n<row><Class>pumps</Class><Name>voltage</Name><Type>main</Type><Value>240</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>2</Operation_ID><Threshold>270</Threshold><Fault_Code>301</Fault_Code><Increment/></row>\n<row><Class>pumps</Class><Name>voltage</Name><Type>main</Type><Value>240</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>1</Operation_ID><Threshold>200</Threshold><Fault_Code>302</Fault_Code><Increment/></row>\n</Variables>"
 };
 
 /* ======== STABLE JS LOGIC (INJECTED FROM CODEGEN) ======== */
@@ -1522,13 +1529,53 @@ function validateValidityField(input) {
       /* class key = 'type'; Value must match a Key in Metadata where Class='type' */
       classKey = Object.keys(dict).find(function(k) { return k.toLowerCase() === "type"; }) || "type";
     } else {
-      /* no Metadata validation for other Type values */
-      input.style.borderColor = "";
-      input.classList.remove("invalid");
-      errSpan.textContent = "";
-      errSpan.style.color = "";
-      updateInsertBtn(input);
-      return true;
+      /* look up variable data type to decide how to treat Value */
+      var clsInp = form.querySelector('[data-name="Class"]');
+      var nmInp  = form.querySelector('[data-name="Name"]');
+      var clsVal = clsInp ? clsInp.value.trim() : "";
+      var nmVal  = nmInp  ? nmInp.value.trim()  : "";
+      var varDict = buildVariableDict();
+      var clsKey2 = Object.keys(varDict).find(function(k) { return k.toLowerCase() === clsVal.toLowerCase(); });
+      var nmKey2  = clsKey2 ? Object.keys(varDict[clsKey2]).find(function(k) { return k.toLowerCase() === nmVal.toLowerCase(); }) : null;
+      if (!nmKey2) {
+        input.style.borderColor = "";
+        input.classList.remove("invalid");
+        errSpan.textContent = "";
+        errSpan.style.color = "";
+        updateInsertBtn(input);
+        return true;
+      }
+      var nmDict = varDict[clsKey2][nmKey2];
+      /* resolve type label */
+      var tRK = Object.keys(nmDict).find(function(k) { return k.toLowerCase() === "type"; });
+      var tLabel = "";
+      if (tRK) {
+        var tKV = (nmDict[tRK]["Value"] !== null && nmDict[tRK]["Value"] !== undefined) ? String(nmDict[tRK]["Value"]) : "";
+        var tKN = (tKV !== "" && isFinite(tKV)) ? String(parseFloat(tKV)) : tKV;
+        var tCK = Object.keys(dict).find(function(k) { return k.toLowerCase() === "type"; }) || "type";
+        tLabel = (dict[tCK] && dict[tCK].hasOwnProperty(tKN)) ? dict[tCK][tKN].toLowerCase() : "";
+      }
+      if (tLabel === "choice") {
+        /* validate Value as a choice key: Metadata[varName][value] = choice label */
+        classKey = Object.keys(dict).find(function(k) { return k.toLowerCase() === nmKey2.toLowerCase(); }) || nmKey2;
+        /* fall through to Metadata lookup below */
+      } else {
+        /* numeric/other: show unit as a green hint, no hard validation */
+        var uRK = Object.keys(nmDict).find(function(k) { return k.toLowerCase() === "unit"; });
+        var uMsg = null;
+        if (uRK) {
+          var uKV = (nmDict[uRK]["Value"] !== null && nmDict[uRK]["Value"] !== undefined) ? String(nmDict[uRK]["Value"]) : "";
+          var uKN = (uKV !== "" && isFinite(uKV)) ? String(parseFloat(uKV)) : uKV;
+          var uCK = Object.keys(dict).find(function(k) { return k.toLowerCase() === nmKey2.toLowerCase(); });
+          uMsg = (uCK && dict[uCK].hasOwnProperty(uKN)) ? dict[uCK][uKN] : null;
+        }
+        input.style.borderColor = uMsg !== null ? "green" : "";
+        input.classList.remove("invalid");
+        errSpan.textContent = uMsg !== null ? uMsg.toUpperCase() : "";
+        errSpan.style.color = uMsg !== null ? "green" : "";
+        updateInsertBtn(input);
+        return true;
+      }
     }
   }
 
