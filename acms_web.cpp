@@ -239,12 +239,17 @@ static void increment_task(void *pvParameters)
             increment_pool_row_t *r = &increment_pool.rows[i];
             if (r->value_ptr == NULL) continue;
             float old_val = *r->value_ptr;
-            *r->value_ptr += r->Increment;
+            float new_val = old_val + r->Increment;
+            if (r->threshold != -9999.0f && new_val >= 1.1f * r->threshold) {
+                new_val = r->ini_val;
+                Serial.printf("[Increment] [%d] threshold hit — reset to ini_val=%.4f\n", i, new_val);
+            }
+            *r->value_ptr = new_val;
             Serial.printf("[Increment] [%d] old=%.4f  inc=%.4f  new=%.4f\n",
-                          i, old_val, r->Increment, *r->value_ptr);
+                          i, old_val, r->Increment, new_val);
             update_variable(r->value_ptr);
         }
-        sync_all_nochange();
+        sync_all();
         vTaskDelay(pdMS_TO_TICKS(INCREMENT_LOOP_INTERVAL_MS));
     }
 }
@@ -264,7 +269,8 @@ void acms_system_init(const char *login_user, const char *login_pass)
   get_metadata();             /* parse Metadata.xml → register with data manager → sync */
   load_variables_from_spiffs(); /* parse Variables.xml → populate description/constraints/modbus tables */
 
-  /* ---- Dump populated struct tables ---- */
+  // ---- Dump populated struct tables ---- 
+  
   Serial.printf("\n=== Metadata Table (%d rows) ===\n", metadata_table.count);
   for (int i = 0; i < metadata_table.count; i++) {
     Serial.printf("  [%d] Key=%.2f  Message=%s  Class=%s\n", i,
@@ -285,11 +291,12 @@ void acms_system_init(const char *login_user, const char *login_pass)
 
   Serial.printf("\n=== Variables Constraints Table (%d rows) ===\n", variables_constraints_table.count);
   for (int i = 0; i < variables_constraints_table.count; i++) {
-    Serial.printf("  [%d] Op_ID=%.0f  Threshold=%.2f  Fault_Code=%.0f  Increment=%.4f\n", i,
+    Serial.printf("  [%d] Op_ID=%.0f  Threshold=%.2f  Fault_Code=%.0f  Increment=%.4f  constraint_id=%d\n", i,
       variables_constraints_table.rows[i].Operation_ID,
       variables_constraints_table.rows[i].Threshold,
       variables_constraints_table.rows[i].Fault_Code,
-      variables_constraints_table.rows[i].Increment);
+      variables_constraints_table.rows[i].Increment,
+      variables_constraints_table.rows[i].constraints_id);
   }
 
   Serial.printf("\n=== Variables Modbus Table (%d rows) ===\n", variables_modbus_table.count);

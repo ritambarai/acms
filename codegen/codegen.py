@@ -1220,15 +1220,44 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
             lines.append("")
 
             if has_optional:
-                # Source subcat fields — use src_sl_count as index
+                # Source subcat fields — extract into temp vars first for hashmap pre-check
                 sl = src_sc.lower()
                 prefix = f"{tl}_{sl}"
                 PREFIX = f"{tu}_{src_sc.upper()}"
                 tbl_var = f"{sl}_tbl"
-                lines.append(f"    /* ── {src_sc} ── */")
-                for fn in subcats[src_sc]:
-                    typ = field_map[fn]
-                    _gen_field_extract(lines, fn, typ, prefix, PREFIX, tbl_var, idx=f"{src_sl}_count")
+                sc_fields_typed = [(fn, field_map[fn]) for fn in subcats[src_sc]]
+                lines.append(f"    /* ── {src_sc}: extract into temps for hashmap pre-check ── */")
+                # Declare temp vars
+                for fn, typ in sc_fields_typed:
+                    ci = c_ident(fn)
+                    if typ == "string":
+                        lines.append(f'    char _t_{ci}[256] = "";')
+                    elif typ in C_NUMERIC_TYPES:
+                        lines.append(f"    float _t_{ci} = -9999.0f;")
+                    elif typ in C_INT_TYPES:
+                        lines.append(f"    {C_TYPE_MAP[typ]} _t_{ci} = 0;")
+                    elif typ == "boolean":
+                        lines.append(f"    bool _t_{ci} = false;")
+                lines.append("")
+                # Extract each field into temps with validation
+                for fn, typ in sc_fields_typed:
+                    ci = c_ident(fn)
+                    ci_upper = ci.upper()
+                    enum_val = f"COL_{PREFIX}_{ci_upper}_{typ.upper()}"
+                    lines.append(f'    extract_tag(row_buf, "{ci}", buf, sizeof(buf));')
+                    lines.append(f"    if (buf[0] && !validate_{prefix}_value({enum_val}, buf)) {{")
+                    lines.append(f"      pos = row_end + 6; continue;")
+                    lines.append(f"    }}")
+                    if typ in C_NUMERIC_TYPES:
+                        lines.append(f"    _t_{ci} = buf[0] ? (float)atof(buf) : -9999.0f;")
+                    elif typ in C_INT_TYPES:
+                        lines.append(f"    _t_{ci} = buf[0] ? ({C_TYPE_MAP[typ]})strtol(buf, NULL, 10) : 0;")
+                    elif typ == "boolean":
+                        lines.append(f'    _t_{ci} = (strcmp(buf, "true") == 0);')
+                    else:  # string
+                        lines.append(f'    if (buf[0]) {{ strncpy(_t_{ci}, buf, sizeof(_t_{ci})-1); _t_{ci}[sizeof(_t_{ci})-1] = \'\\0\'; }}')
+                        lines.append(f'    else _t_{ci}[0] = \'\\0\';')
+                    lines.append("")
 
                 # Pre-collect optional subcat metadata for both extraction and commit phases
                 osc_info = []
@@ -1267,16 +1296,30 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                 si = f"{src_sl}_count"
 
                 if use_hashmap:
-                    # Hashmap lookup: check if var is already registered in the DM
-                    lines.append(f"    /* ── hashmap lookup: check if var already registered ── */")
+                    # Hashmap lookup using temp vars (before writing to desc row)
+                    lines.append(f"    /* ── hashmap lookup using temps: check if var already registered ── */")
                     lines.append(f"    uint16_t _cls_idx = INVALID_INDEX;")
                     lines.append(f"    uint16_t _var_pool_id = INVALID_INDEX;")
-                    lines.append(f"    if ({sv}->rows[{si}].Class && {sv}->rows[{si}].Name && {sv}->rows[{si}].Type) {{")
-                    lines.append(f"      _cls_idx = dm_class_map_find({sv}->rows[{si}].Class);")
-                    lines.append(f"      if (_cls_idx != INVALID_INDEX)")
-                    lines.append(f"        _var_pool_id = dm_var_map_find(_cls_idx, {sv}->rows[{si}].Name, {sv}->rows[{si}].Type);")
-                    lines.append(f"    }}")
+                    # Find Class/Name/Type string temp var names
+                    _cls_ci  = next((c_ident(fn) for fn, typ in sc_fields_typed if typ == "string" and c_ident(fn) == "Class"), None)
+                    _name_ci = next((c_ident(fn) for fn, typ in sc_fields_typed if typ == "string" and c_ident(fn) == "Name"), None)
+                    _type_ci = next((c_ident(fn) for fn, typ in sc_fields_typed if typ == "string" and c_ident(fn) == "Type"), None)
+                    if _cls_ci and _name_ci and _type_ci:
+                        lines.append(f"    if (_t_{_cls_ci}[0] && _t_{_name_ci}[0] && _t_{_type_ci}[0]) {{")
+                        lines.append(f"      _cls_idx = dm_class_map_find(_t_{_cls_ci});")
+                        lines.append(f"      if (_cls_idx != INVALID_INDEX)")
+                        lines.append(f"        _var_pool_id = dm_var_map_find(_cls_idx, _t_{_name_ci}, _t_{_type_ci});")
+                        lines.append(f"    }}")
                     lines.append(f"    if (_var_pool_id == INVALID_INDEX) {{")
+                    # Copy temps to desc row for new-var path
+                    lines.append(f"      /* copy temps → desc row (only for new vars) */")
+                    for fn, typ in sc_fields_typed:
+                        ci = c_ident(fn)
+                        if typ == "string":
+                            lines.append(f"      {tbl_var}->rows[{si}].{ci} = _t_{ci}[0] ? strdup(_t_{ci}) : NULL;")
+                        else:
+                            lines.append(f"      {tbl_var}->rows[{si}].{ci} = _t_{ci};")
+                    lines.append("")
                     p = "  "  # extra indent inside new-var branch
                 else:
                     p = ""
@@ -1295,10 +1338,13 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                         if "constraint" in osl:
                             lines.append(f"{p}      {osl}_tbl->rows[{osl}_count].constraints_id = -1;")
                             lines.append(f"{p}      {src_sl}_tbl->rows[{src_sl}_count].constraint_id = {osl}_count;")
-                            inc_temp = next((tv for fn, tv in temp_vars if c_ident(fn) == "Increment"), None)
+                            inc_temp   = next((tv for fn, tv in temp_vars if c_ident(fn) == "Increment"), None)
+                            thresh_temp = next((tv for fn, tv in temp_vars if c_ident(fn) == "Threshold"), None)
                             if inc_temp:
                                 lines.append(f"{p}      if ({inc_temp} != -9999.0f) {{")
                                 lines.append(f"{p}        increment_pool.rows[increment_pool.count].Increment = {inc_temp};")
+                                lines.append(f"{p}        increment_pool.rows[increment_pool.count].ini_val   = {src_sl}_tbl->rows[{src_sl}_count].Value;")
+                                lines.append(f"{p}        increment_pool.rows[increment_pool.count].threshold = {thresh_temp if thresh_temp else '-9999.0f'};")
                                 lines.append(f"{p}        increment_pool.rows[increment_pool.count].value_ptr = &{src_sl}_tbl->rows[{src_sl}_count].Value;")
                                 lines.append(f"{p}        increment_pool.count++;")
                                 lines.append(f"{p}      }}")
@@ -1311,7 +1357,6 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
 
                 # dm_set_value + debug printf + description_count++ (new-var path)
                 if use_hashmap:
-                    sc_fields_typed = [(fn, field_map[fn]) for fn in subcats[src_sc]]
                     printf_fmts = []
                     printf_args_list = []
                     for fn, ftyp in sc_fields_typed:
@@ -1332,7 +1377,35 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                     lines.append(f"      dm_set_value(&{sv}->rows[{si}],")
                     lines.append(f"                   &{sv}->rows[{si}].Value);")
                     lines.append("")
+                    # After dm_set_value, sync var_pool.constraint_idx so later rows for the
+                    # same var can correctly append to the constraint chain started here.
+                    has_constraint_osc = any("constraint" in osl and temp_vars and cond
+                                             for _, osl, _, _, _, _, temp_vars, cond in osc_info)
+                    if has_constraint_osc:
+                        lines.append(f"      /* sync var_pool.constraint_idx so duplicate rows can chain onto this */")
+                        lines.append(f"      {{")
+                        lines.append(f"        uint16_t _new_cls = dm_class_map_find({sv}->rows[{si}].Class);")
+                        lines.append(f"        if (_new_cls != INVALID_INDEX) {{")
+                        lines.append(f"          uint16_t _new_vid = dm_var_map_find(_new_cls, {sv}->rows[{si}].Name, {sv}->rows[{si}].Type);")
+                        lines.append(f"          if (_new_vid != INVALID_INDEX && {sv}->rows[{si}].constraint_id != -1)")
+                        lines.append(f"            var_pool[_new_vid].constraint_idx = {sv}->rows[{si}].constraint_id;")
+                        lines.append(f"        }}")
+                        lines.append(f"      }}")
+                        lines.append("")
                     lines.append(f'      Serial.printf("[%d] {fmt_str}\\n", {all_args});')
+                    # Print constraint chain if any
+                    for osc, osl, osu, prefix_o, PREFIX_O, ofields, temp_vars, cond in osc_info:
+                        if "constraint" in osl and temp_vars:
+                            num_fields = [(c_ident(fn), typ) for fn, typ in ofields if typ in C_NUMERIC_TYPES]
+                            c_fmt  = "  ".join(f"{ci}=%.4f" for ci, _ in num_fields)
+                            c_args = ", ".join(f"{osl}_tbl->rows[_cid].{ci}" for ci, _ in num_fields)
+                            lines.append(f"      {{")
+                            lines.append(f"        int _cid = {sv}->rows[{si}].constraint_id;")
+                            lines.append(f"        while (_cid != -1) {{")
+                            lines.append(f'          Serial.printf("    C[%d] {c_fmt}\\n", _cid, {c_args});')
+                            lines.append(f"          _cid = {osl}_tbl->rows[_cid].constraints_id;")
+                            lines.append(f"        }}")
+                            lines.append(f"      }}")
                     lines.append("")
                     lines.append(f"      {src_sl}_count++;")
                     lines.append(f"    }} else {{")
@@ -1360,6 +1433,8 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                             if inc_temp:
                                 lines.append(f"        if ({inc_temp} != -9999.0f) {{")
                                 lines.append(f"          increment_pool.rows[increment_pool.count].Increment = {inc_temp};")
+                                lines.append(f"          increment_pool.rows[increment_pool.count].ini_val   = *(float *)var_pool[_var_pool_id].ext_addr;")
+                                lines.append(f"          increment_pool.rows[increment_pool.count].threshold = {thresh_temp if thresh_temp else '-9999.0f'};")
                                 lines.append(f"          increment_pool.rows[increment_pool.count].value_ptr = (float *)var_pool[_var_pool_id].ext_addr;")
                                 lines.append(f"          increment_pool.count++;")
                                 lines.append(f"        }}")
