@@ -17,8 +17,8 @@ extern "C" {
 
 metadata_table_t metadata_table = { .count = 0, .version = 0 };
 variables_description_table_t variables_description_table = { .count = 0, .version = 0 };
-variables_constraints_table_t variables_constraints_table = { .count = 0, .version = 0 };
 variables_modbus_table_t variables_modbus_table = { .count = 0, .version = 0 };
+variables_constraints_table_t variables_constraints_table = { .count = 0, .version = 0 };
 settings_general_t settings_general = { NULL, NULL, 0, 0 };
 settings_mqtt_t settings_mqtt = { NULL, 0, NULL, NULL, NULL, NULL };
 settings_json_t settings_json = { false, false, false };
@@ -129,11 +129,11 @@ int load_metadata_from_spiffs(void) {
 }
 
 
-/* ═══════ Variables: parse XML → variables_description, variables_constraints, variables_modbus tables ═══════ */
-static int parse_variables_xml(const char *xml, variables_description_table_t *description_tbl, variables_constraints_table_t *constraints_tbl, variables_modbus_table_t *modbus_tbl) {
+/* ═══════ Variables: parse XML → variables_description, variables_modbus, variables_constraints tables ═══════ */
+static int parse_variables_xml(const char *xml, variables_description_table_t *description_tbl, variables_modbus_table_t *modbus_tbl, variables_constraints_table_t *constraints_tbl) {
   int description_count = 0;
-  int constraints_count = 0;
   int modbus_count = 0;
+  int constraints_count = 0;
   const char *pos = xml;
   char buf[256];
 
@@ -175,33 +175,6 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
     }
     description_tbl->rows[description_count].Value = buf[0] ? (float)atof(buf) : -9999.0f;
 
-    /* ── constraints: parse into temporaries, commit only if any field is non-default ── */
-    float _t_Operation_ID, _t_Threshold, _t_Fault_Code, _t_Increment;
-
-    extract_tag(row_buf, "Operation_ID", buf, sizeof(buf));
-    if (buf[0] && !validate_variables_constraints_value(COL_VARIABLES_CONSTRAINTS_OPERATION_ID_FLOAT, buf)) {
-      pos = row_end + 6; continue;
-    }
-    _t_Operation_ID = buf[0] ? (float)atof(buf) : -9999.0f;
-
-    extract_tag(row_buf, "Threshold", buf, sizeof(buf));
-    if (buf[0] && !validate_variables_constraints_value(COL_VARIABLES_CONSTRAINTS_THRESHOLD_FLOAT, buf)) {
-      pos = row_end + 6; continue;
-    }
-    _t_Threshold = buf[0] ? (float)atof(buf) : -9999.0f;
-
-    extract_tag(row_buf, "Fault_Code", buf, sizeof(buf));
-    if (buf[0] && !validate_variables_constraints_value(COL_VARIABLES_CONSTRAINTS_FAULT_CODE_FLOAT, buf)) {
-      pos = row_end + 6; continue;
-    }
-    _t_Fault_Code = buf[0] ? (float)atof(buf) : -9999.0f;
-
-    extract_tag(row_buf, "Increment", buf, sizeof(buf));
-    if (buf[0] && !validate_variables_constraints_value(COL_VARIABLES_CONSTRAINTS_INCREMENT_FLOAT, buf)) {
-      pos = row_end + 6; continue;
-    }
-    _t_Increment = buf[0] ? (float)atof(buf) : -9999.0f;
-
     /* ── modbus: parse into temporaries, commit only if any field is non-default ── */
     float _t_Slave_ID, _t_Function_ID, _t_Start_Address, _t_Data_Length;
 
@@ -229,6 +202,33 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
     }
     _t_Data_Length = buf[0] ? (float)atof(buf) : -9999.0f;
 
+    /* ── constraints: parse into temporaries, commit only if any field is non-default ── */
+    float _t_Operation_ID, _t_Threshold, _t_Fault_Code, _t_Increment;
+
+    extract_tag(row_buf, "Operation_ID", buf, sizeof(buf));
+    if (buf[0] && !validate_variables_constraints_value(COL_VARIABLES_CONSTRAINTS_OPERATION_ID_FLOAT, buf)) {
+      pos = row_end + 6; continue;
+    }
+    _t_Operation_ID = buf[0] ? (float)atof(buf) : -9999.0f;
+
+    extract_tag(row_buf, "Threshold", buf, sizeof(buf));
+    if (buf[0] && !validate_variables_constraints_value(COL_VARIABLES_CONSTRAINTS_THRESHOLD_FLOAT, buf)) {
+      pos = row_end + 6; continue;
+    }
+    _t_Threshold = buf[0] ? (float)atof(buf) : -9999.0f;
+
+    extract_tag(row_buf, "Fault_Code", buf, sizeof(buf));
+    if (buf[0] && !validate_variables_constraints_value(COL_VARIABLES_CONSTRAINTS_FAULT_CODE_FLOAT, buf)) {
+      pos = row_end + 6; continue;
+    }
+    _t_Fault_Code = buf[0] ? (float)atof(buf) : -9999.0f;
+
+    extract_tag(row_buf, "Increment", buf, sizeof(buf));
+    if (buf[0] && !validate_variables_constraints_value(COL_VARIABLES_CONSTRAINTS_INCREMENT_FLOAT, buf)) {
+      pos = row_end + 6; continue;
+    }
+    _t_Increment = buf[0] ? (float)atof(buf) : -9999.0f;
+
     /* ── hashmap lookup: check if var already registered ── */
     uint16_t _cls_idx = INVALID_INDEX;
     uint16_t _var_pool_id = INVALID_INDEX;
@@ -238,6 +238,17 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
         _var_pool_id = dm_var_map_find(_cls_idx, description_tbl->rows[description_count].Name, description_tbl->rows[description_count].Type);
     }
     if (_var_pool_id == INVALID_INDEX) {
+      if (_t_Slave_ID != -9999.0f || _t_Function_ID != -9999.0f || _t_Start_Address != -9999.0f || _t_Data_Length != -9999.0f) {
+        /* at least one modbus field is real — commit this row */
+        modbus_tbl->rows[modbus_count].Slave_ID = _t_Slave_ID;
+        modbus_tbl->rows[modbus_count].Function_ID = _t_Function_ID;
+        modbus_tbl->rows[modbus_count].Start_Address = _t_Start_Address;
+        modbus_tbl->rows[modbus_count].Data_Length = _t_Data_Length;
+        modbus_tbl->rows[modbus_count].value_ptr = &description_tbl->rows[description_count].Value;
+        modbus_count++;
+      } else {
+      }
+
       if (_t_Operation_ID != -9999.0f || _t_Threshold != -9999.0f || _t_Fault_Code != -9999.0f || _t_Increment != -9999.0f) {
         /* at least one constraints field is real — commit this row */
         constraints_tbl->rows[constraints_count].Operation_ID = _t_Operation_ID;
@@ -255,17 +266,6 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
         constraints_count++;
       } else {
         description_tbl->rows[description_count].constraint_id = -1;
-      }
-
-      if (_t_Slave_ID != -9999.0f || _t_Function_ID != -9999.0f || _t_Start_Address != -9999.0f || _t_Data_Length != -9999.0f) {
-        /* at least one modbus field is real — commit this row */
-        modbus_tbl->rows[modbus_count].Slave_ID = _t_Slave_ID;
-        modbus_tbl->rows[modbus_count].Function_ID = _t_Function_ID;
-        modbus_tbl->rows[modbus_count].Start_Address = _t_Start_Address;
-        modbus_tbl->rows[modbus_count].Data_Length = _t_Data_Length;
-        modbus_tbl->rows[modbus_count].value_ptr = &description_tbl->rows[description_count].Value;
-        modbus_count++;
-      } else {
       }
 
       dm_set_value(&description_tbl->rows[description_count],
@@ -304,9 +304,9 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
   }
 
   description_tbl->count = description_count;
-  constraints_tbl->count = constraints_count;
   modbus_tbl->count = modbus_count;
-  Serial.printf("[Variables] total rows: %d  constraints: %d  modbus: %d\n", description_count, constraints_count, modbus_count);
+  constraints_tbl->count = constraints_count;
+  Serial.printf("[Variables] total rows: %d  modbus: %d  constraints: %d\n", description_count, modbus_count, constraints_count);
   return description_count;
 }
 
@@ -328,15 +328,15 @@ int load_variables_from_spiffs(void) {
   File f = SPIFFS.open("/Variables.xml", "r");
   if (f) { content = f.readString(); f.close(); }
   int n = (content.length() > 0)
-          ? parse_variables_xml(content.c_str(), &variables_description_table, &variables_constraints_table, &variables_modbus_table)
+          ? parse_variables_xml(content.c_str(), &variables_description_table, &variables_modbus_table, &variables_constraints_table)
           : 0;
   if (n == 0) {
     Serial.println("[XML] Variables.xml empty/missing -- using default");
-    n = parse_variables_xml(VARIABLES_XML_DEFAULT, &variables_description_table, &variables_constraints_table, &variables_modbus_table);
+    n = parse_variables_xml(VARIABLES_XML_DEFAULT, &variables_description_table, &variables_modbus_table, &variables_constraints_table);
   }
   variables_description_table.version++;
-  variables_constraints_table.version++;
   variables_modbus_table.version++;
+  variables_constraints_table.version++;
   sync_all();
   return n;
 }

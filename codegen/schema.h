@@ -106,6 +106,60 @@ static inline bool validate_variables_description_value(variables_description_co
 }
 
 
+/* ─── Variables / modbus ─── */
+
+typedef enum {
+  COL_VARIABLES_MODBUS_SLAVE_ID_FLOAT,
+  COL_VARIABLES_MODBUS_FUNCTION_ID_FLOAT,
+  COL_VARIABLES_MODBUS_START_ADDRESS_FLOAT,
+  COL_VARIABLES_MODBUS_DATA_LENGTH_FLOAT,
+} variables_modbus_col_type_t;
+
+#define VARIABLES_MODBUS_COL_COUNT 4
+
+static const variables_modbus_col_type_t variables_modbus_column_types[VARIABLES_MODBUS_COL_COUNT] = {
+  COL_VARIABLES_MODBUS_SLAVE_ID_FLOAT,
+  COL_VARIABLES_MODBUS_FUNCTION_ID_FLOAT,
+  COL_VARIABLES_MODBUS_START_ADDRESS_FLOAT,
+  COL_VARIABLES_MODBUS_DATA_LENGTH_FLOAT,
+};
+
+static const char *variables_modbus_column_names[VARIABLES_MODBUS_COL_COUNT] = {
+  "Slave_ID", "Function_ID", "Start_Address", "Data_Length"
+};
+
+typedef struct {
+  float Slave_ID;
+  float Function_ID;
+  float Start_Address;
+  float Data_Length;
+  float *value_ptr;   /* points to description struct Value field */
+} variables_modbus_row_t;
+
+#define MAX_VARIABLES_MODBUS_ROWS 128
+
+typedef struct {
+  variables_modbus_row_t rows[MAX_VARIABLES_MODBUS_ROWS];
+  int count;
+  int version;
+} variables_modbus_table_t;
+
+extern variables_modbus_table_t variables_modbus_table;
+
+static inline bool validate_variables_modbus_value(variables_modbus_col_type_t type, const char *v) {
+  if (!v || v[0] == '\0') return true;
+  switch (type) {
+    case COL_VARIABLES_MODBUS_SLAVE_ID_FLOAT:
+    case COL_VARIABLES_MODBUS_FUNCTION_ID_FLOAT:
+    case COL_VARIABLES_MODBUS_START_ADDRESS_FLOAT:
+    case COL_VARIABLES_MODBUS_DATA_LENGTH_FLOAT:
+      return isfinite(atof(v));
+    default:
+      return true;
+  }
+}
+
+
 /* ─── Variables / constraints ─── */
 
 typedef enum {
@@ -154,60 +208,6 @@ static inline bool validate_variables_constraints_value(variables_constraints_co
     case COL_VARIABLES_CONSTRAINTS_THRESHOLD_FLOAT:
     case COL_VARIABLES_CONSTRAINTS_FAULT_CODE_FLOAT:
     case COL_VARIABLES_CONSTRAINTS_INCREMENT_FLOAT:
-      return isfinite(atof(v));
-    default:
-      return true;
-  }
-}
-
-
-/* ─── Variables / modbus ─── */
-
-typedef enum {
-  COL_VARIABLES_MODBUS_SLAVE_ID_FLOAT,
-  COL_VARIABLES_MODBUS_FUNCTION_ID_FLOAT,
-  COL_VARIABLES_MODBUS_START_ADDRESS_FLOAT,
-  COL_VARIABLES_MODBUS_DATA_LENGTH_FLOAT,
-} variables_modbus_col_type_t;
-
-#define VARIABLES_MODBUS_COL_COUNT 4
-
-static const variables_modbus_col_type_t variables_modbus_column_types[VARIABLES_MODBUS_COL_COUNT] = {
-  COL_VARIABLES_MODBUS_SLAVE_ID_FLOAT,
-  COL_VARIABLES_MODBUS_FUNCTION_ID_FLOAT,
-  COL_VARIABLES_MODBUS_START_ADDRESS_FLOAT,
-  COL_VARIABLES_MODBUS_DATA_LENGTH_FLOAT,
-};
-
-static const char *variables_modbus_column_names[VARIABLES_MODBUS_COL_COUNT] = {
-  "Slave_ID", "Function_ID", "Start_Address", "Data_Length"
-};
-
-typedef struct {
-  float Slave_ID;
-  float Function_ID;
-  float Start_Address;
-  float Data_Length;
-  float *value_ptr;   /* points to description struct Value field */
-} variables_modbus_row_t;
-
-#define MAX_VARIABLES_MODBUS_ROWS 128
-
-typedef struct {
-  variables_modbus_row_t rows[MAX_VARIABLES_MODBUS_ROWS];
-  int count;
-  int version;
-} variables_modbus_table_t;
-
-extern variables_modbus_table_t variables_modbus_table;
-
-static inline bool validate_variables_modbus_value(variables_modbus_col_type_t type, const char *v) {
-  if (!v || v[0] == '\0') return true;
-  switch (type) {
-    case COL_VARIABLES_MODBUS_SLAVE_ID_FLOAT:
-    case COL_VARIABLES_MODBUS_FUNCTION_ID_FLOAT:
-    case COL_VARIABLES_MODBUS_START_ADDRESS_FLOAT:
-    case COL_VARIABLES_MODBUS_DATA_LENGTH_FLOAT:
       return isfinite(atof(v));
     default:
       return true;
