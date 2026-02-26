@@ -3,6 +3,8 @@
 #include "json_telemetry.h"
 #include "schema.h"   /* effective_class_pool_size / effective_var_pool_size */
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 /* ============================================================
  *  GLOBAL STATE
@@ -196,7 +198,7 @@ bool remove_variable(void *ext_addr)
     /* --------------------------------------------------------
      * REMOVE FROM HASHMAPS
      * -------------------------------------------------------- */
-    dm_var_map_delete(v->class_idx, v->var_name);
+    dm_var_map_delete(v->class_idx, v->var_name, v->var_type);
     dm_addr_map_delete(ext_addr);
 
     /* --------------------------------------------------------
@@ -349,7 +351,6 @@ bool dm_set_value(const variables_description_row_t *row, void *ext_addr)
         var_pool[var_idx].ext_addr       = ext_addr;
         var_pool[var_idx].var_type       = type;
         var_pool[var_idx].cached_val     = value;
-        
 
         //used_var[var_idx] = true;
 
@@ -371,7 +372,7 @@ bool dm_set_value(const variables_description_row_t *row, void *ext_addr)
         }
 	*/
 	insert_list_item(class_idx,var_idx);
-        dm_var_map_prepare(class_idx, var_name, var_idx);
+        dm_var_map_prepare(class_idx, var_name, type, var_idx);
         dm_addr_map_prepare(ext_addr, var_idx);
         flags |= MAPF_VAR | MAPF_ADDR;
       /* --------------------------------------------------------

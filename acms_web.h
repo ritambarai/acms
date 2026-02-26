@@ -13,6 +13,8 @@ extern "C" {
 
 typedef struct {
   float  Increment;
+  float  ini_val;
+  float  threshold;   /* -9999.0f = no threshold */
   float *value_ptr;
 } increment_pool_row_t;
 

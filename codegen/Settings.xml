@@ -1,5 +1,5 @@
 <Settings>
-  <row><general><SSID>Airtel_kaus_0496</SSID><Password>air68987</Password><Class_Pool_Size>32</Class_Pool_Size><Var_Pool_Size>128</Var_Pool_Size></general></row>
-  <row><mqtt><Host>mqtt-server.ddns.net</Host><Port>1883</Port><Data_Topic>ACMS_Rey/01/</Data_Topic><Alert_Topic></Alert_Topic><Username></Username><Mqtt_Password></Mqtt_Password></mqtt></row>
-  <row><json><Metadata>false</Metadata><Constraints>false</Constraints><Modbus>false</Modbus></json></row>
+  <row><general><SSID>Ritam iPhone</SSID><Password>password</Password><Class_Pool_Size>32</Class_Pool_Size><Var_Pool_Size>128</Var_Pool_Size></general></row>
+  <row><mqtt><Host>mqtt-server.ddns.net</Host><Port>1883</Port><Data_Topic>ACMS_Rey/01/</Data_Topic><Alert_Topic>ACMS_Rey/01/</Alert_Topic><Username></Username><Mqtt_Password></Mqtt_Password></mqtt></row>
+  <row><json><Metadata>true</Metadata><Constraints>true</Constraints><Modbus>false</Modbus></json></row>
 </Settings>

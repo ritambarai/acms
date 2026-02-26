@@ -1,7 +1,26 @@
 <Metadata>
-<row><Key>0</Key><Message>choice</Message><Class>type</Class></row>
-<row><Key>1</Key><Message>numeric</Message><Class>type</Class></row>
-<row><Key>1</Key><Message>bar</Message><Class>pressure</Class></row>
-<row><Key>1</Key><Message>Less than</Message><Class>Operation_ID</Class></row>
-<row><Key>1</Key><Message>TOO LOW</Message><Class>Fault_Code</Class></row>
+<row><Class>Fault_Code</Class><Key>101</Key><Message>Fault</Message></row>
+<row><Class>Fault_Code</Class><Key>201</Key><Message>Low Level</Message></row>
+<row><Class>Fault_Code</Class><Key>301</Key><Message>Over Voltage</Message></row>
+<row><Class>Fault_Code</Class><Key>302</Key><Message>Under Voltage</Message></row>
+<row><Class>Fault_Code</Class><Key>401</Key><Message>Low Pressure</Message></row>
+<row><Class>Fault_Code</Class><Key>402</Key><Message>High Pressure</Message></row>
+<row><Class>level</Class><Key>1</Key><Message>Percentage(%)</Message></row>
+<row><Class>level</Class><Key>2</Key><Message>meter</Message></row>
+<row><Class>mode</Class><Key>0</Key><Message>AUTO</Message></row>
+<row><Class>mode</Class><Key>1</Key><Message>MANUAL</Message></row>
+<row><Class>Operation_ID</Class><Key>0</Key><Message>Equals to</Message></row>
+<row><Class>Operation_ID</Class><Key>1</Key><Message>Less than</Message></row>
+<row><Class>Operation_ID</Class><Key>2</Key><Message>Greater than</Message></row>
+<row><Class>Operation_ID</Class><Key>3</Key><Message>Greater than/ Equals to</Message></row>
+<row><Class>Operation_ID</Class><Key>4</Key><Message>Less than/ Equals to</Message></row>
+<row><Class>Operation_ID</Class><Key>5</Key><Message>Not Equals to</Message></row>
+<row><Class>pressure</Class><Key>1</Key><Message>bar</Message></row>
+<row><Class>status</Class><Key>0</Key><Message>OFF</Message></row>
+<row><Class>status</Class><Key>1</Key><Message>ON</Message></row>
+<row><Class>trip</Class><Key>0</Key><Message>FALSE</Message></row>
+<row><Class>trip</Class><Key>1</Key><Message>TRUE</Message></row>
+<row><Class>type</Class><Key>0</Key><Message>choice</Message></row>
+<row><Class>type</Class><Key>1</Key><Message>numeric</Message></row>
+<row><Class>voltage</Class><Key>1</Key><Message>Volts(V)</Message></row>
 </Metadata>
