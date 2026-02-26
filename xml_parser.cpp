@@ -67,6 +67,12 @@ static int parse_metadata_xml(const char *xml, metadata_table_t *tbl) {
     memcpy(row_buf, row_start, row_len);
     row_buf[row_len] = '\0';
 
+    extract_tag(row_buf, "Class", buf, sizeof(buf));
+    if (buf[0] && !validate_metadata_value(COL_METADATA_CLASS_STRING, buf)) {
+      pos = row_end + 6; continue;
+    }
+    tbl->rows[count].Class = buf[0] ? strdup(buf) : NULL;
+
     extract_tag(row_buf, "Key", buf, sizeof(buf));
     if (buf[0] && !validate_metadata_value(COL_METADATA_KEY_FLOAT, buf)) {
       pos = row_end + 6; continue;
@@ -79,18 +85,12 @@ static int parse_metadata_xml(const char *xml, metadata_table_t *tbl) {
     }
     tbl->rows[count].Message = buf[0] ? strdup(buf) : NULL;
 
-    extract_tag(row_buf, "Class", buf, sizeof(buf));
-    if (buf[0] && !validate_metadata_value(COL_METADATA_CLASS_STRING, buf)) {
-      pos = row_end + 6; continue;
-    }
-    tbl->rows[count].Class = buf[0] ? strdup(buf) : NULL;
-
     row.Name  = tbl->rows[count].Class;
     row.Type  = tbl->rows[count].Message;
     row.Value = tbl->rows[count].Key;
     dm_set_value(&row, &tbl->rows[count].Key);
 
-    Serial.printf("[%d] Key=%.2f  Message=%s  Class=%s\n", count, tbl->rows[count].Key, tbl->rows[count].Message ? tbl->rows[count].Message : "(null)", tbl->rows[count].Class ? tbl->rows[count].Class : "(null)");
+    Serial.printf("[%d] Class=%s  Key=%.2f  Message=%s\n", count, tbl->rows[count].Class ? tbl->rows[count].Class : "(null)", tbl->rows[count].Key, tbl->rows[count].Message ? tbl->rows[count].Message : "(null)");
 
     count++;
     pos = row_end + 6;
@@ -103,8 +103,8 @@ static int parse_metadata_xml(const char *xml, metadata_table_t *tbl) {
 /* ── free dynamically allocated strings ── */
 void free_metadata_table(metadata_table_t *tbl) {
   for (int i = 0; i < tbl->count; i++) {
-    if (tbl->rows[i].Message) { free(tbl->rows[i].Message); tbl->rows[i].Message = NULL; }
     if (tbl->rows[i].Class) { free(tbl->rows[i].Class); tbl->rows[i].Class = NULL; }
+    if (tbl->rows[i].Message) { free(tbl->rows[i].Message); tbl->rows[i].Message = NULL; }
   }
   tbl->count = 0;
 }
@@ -202,24 +202,6 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
     }
     _t_Increment = buf[0] ? (float)atof(buf) : -9999.0f;
 
-    if (_t_Operation_ID != -9999.0f || _t_Threshold != -9999.0f || _t_Fault_Code != -9999.0f || _t_Increment != -9999.0f) {
-      /* at least one constraints field is real — commit this row */
-      constraints_tbl->rows[constraints_count].Operation_ID = _t_Operation_ID;
-      constraints_tbl->rows[constraints_count].Threshold = _t_Threshold;
-      constraints_tbl->rows[constraints_count].Fault_Code = _t_Fault_Code;
-      constraints_tbl->rows[constraints_count].Increment = _t_Increment;
-      constraints_tbl->rows[constraints_count].value_ptr = &description_tbl->rows[description_count].Value;
-      description_tbl->rows[description_count].constraint_id = constraints_count;
-      if (_t_Increment != -9999.0f) {
-        increment_pool.rows[increment_pool.count].Increment = _t_Increment;
-        increment_pool.rows[increment_pool.count].value_ptr = &description_tbl->rows[description_count].Value;
-        increment_pool.count++;
-      }
-      constraints_count++;
-    } else {
-      description_tbl->rows[description_count].constraint_id = -1;
-    }
-
     /* ── modbus: parse into temporaries, commit only if any field is non-default ── */
     float _t_Slave_ID, _t_Function_ID, _t_Start_Address, _t_Data_Length;
 
@@ -247,23 +229,77 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
     }
     _t_Data_Length = buf[0] ? (float)atof(buf) : -9999.0f;
 
-    if (_t_Slave_ID != -9999.0f || _t_Function_ID != -9999.0f || _t_Start_Address != -9999.0f || _t_Data_Length != -9999.0f) {
-      /* at least one modbus field is real — commit this row */
-      modbus_tbl->rows[modbus_count].Slave_ID = _t_Slave_ID;
-      modbus_tbl->rows[modbus_count].Function_ID = _t_Function_ID;
-      modbus_tbl->rows[modbus_count].Start_Address = _t_Start_Address;
-      modbus_tbl->rows[modbus_count].Data_Length = _t_Data_Length;
-      modbus_tbl->rows[modbus_count].value_ptr = &description_tbl->rows[description_count].Value;
-      modbus_count++;
+    /* ── hashmap lookup: check if var already registered ── */
+    uint16_t _cls_idx = INVALID_INDEX;
+    uint16_t _var_pool_id = INVALID_INDEX;
+    if (description_tbl->rows[description_count].Class && description_tbl->rows[description_count].Name && description_tbl->rows[description_count].Type) {
+      _cls_idx = dm_class_map_find(description_tbl->rows[description_count].Class);
+      if (_cls_idx != INVALID_INDEX)
+        _var_pool_id = dm_var_map_find(_cls_idx, description_tbl->rows[description_count].Name, description_tbl->rows[description_count].Type);
+    }
+    if (_var_pool_id == INVALID_INDEX) {
+      if (_t_Operation_ID != -9999.0f || _t_Threshold != -9999.0f || _t_Fault_Code != -9999.0f || _t_Increment != -9999.0f) {
+        /* at least one constraints field is real — commit this row */
+        constraints_tbl->rows[constraints_count].Operation_ID = _t_Operation_ID;
+        constraints_tbl->rows[constraints_count].Threshold = _t_Threshold;
+        constraints_tbl->rows[constraints_count].Fault_Code = _t_Fault_Code;
+        constraints_tbl->rows[constraints_count].Increment = _t_Increment;
+        constraints_tbl->rows[constraints_count].value_ptr = &description_tbl->rows[description_count].Value;
+        constraints_tbl->rows[constraints_count].constraints_id = -1;
+        description_tbl->rows[description_count].constraint_id = constraints_count;
+        if (_t_Increment != -9999.0f) {
+          increment_pool.rows[increment_pool.count].Increment = _t_Increment;
+          increment_pool.rows[increment_pool.count].value_ptr = &description_tbl->rows[description_count].Value;
+          increment_pool.count++;
+        }
+        constraints_count++;
+      } else {
+        description_tbl->rows[description_count].constraint_id = -1;
+      }
+
+      if (_t_Slave_ID != -9999.0f || _t_Function_ID != -9999.0f || _t_Start_Address != -9999.0f || _t_Data_Length != -9999.0f) {
+        /* at least one modbus field is real — commit this row */
+        modbus_tbl->rows[modbus_count].Slave_ID = _t_Slave_ID;
+        modbus_tbl->rows[modbus_count].Function_ID = _t_Function_ID;
+        modbus_tbl->rows[modbus_count].Start_Address = _t_Start_Address;
+        modbus_tbl->rows[modbus_count].Data_Length = _t_Data_Length;
+        modbus_tbl->rows[modbus_count].value_ptr = &description_tbl->rows[description_count].Value;
+        modbus_count++;
+      } else {
+      }
+
+      dm_set_value(&description_tbl->rows[description_count],
+                   &description_tbl->rows[description_count].Value);
+
+      Serial.printf("[%d] Class=%s  Name=%s  Type=%s  Value=%.4f  constraint_id=%d\n", description_count, description_tbl->rows[description_count].Class ? description_tbl->rows[description_count].Class : "(null)", description_tbl->rows[description_count].Name ? description_tbl->rows[description_count].Name : "(null)", description_tbl->rows[description_count].Type ? description_tbl->rows[description_count].Type : "(null)", description_tbl->rows[description_count].Value, description_tbl->rows[description_count].constraint_id);
+
+      description_count++;
     } else {
+      /* ── EXISTING VAR: append constraint to chain; value_ptr → original var's Value ── */
+      if (_t_Operation_ID != -9999.0f || _t_Threshold != -9999.0f || _t_Fault_Code != -9999.0f || _t_Increment != -9999.0f) {
+        constraints_tbl->rows[constraints_count].Operation_ID = _t_Operation_ID;
+        constraints_tbl->rows[constraints_count].Threshold = _t_Threshold;
+        constraints_tbl->rows[constraints_count].Fault_Code = _t_Fault_Code;
+        constraints_tbl->rows[constraints_count].Increment = _t_Increment;
+        constraints_tbl->rows[constraints_count].value_ptr = (float *)var_pool[_var_pool_id].ext_addr;
+        constraints_tbl->rows[constraints_count].constraints_id = -1;
+        if (var_pool[_var_pool_id].constraint_idx == INVALID_INDEX) {
+          var_pool[_var_pool_id].constraint_idx = constraints_count;
+        } else {
+          int _chain_idx = (int)var_pool[_var_pool_id].constraint_idx;
+          while (constraints_tbl->rows[_chain_idx].constraints_id != -1)
+            _chain_idx = constraints_tbl->rows[_chain_idx].constraints_id;
+          constraints_tbl->rows[_chain_idx].constraints_id = constraints_count;
+        }
+        if (_t_Increment != -9999.0f) {
+          increment_pool.rows[increment_pool.count].Increment = _t_Increment;
+          increment_pool.rows[increment_pool.count].value_ptr = (float *)var_pool[_var_pool_id].ext_addr;
+          increment_pool.count++;
+        }
+        constraints_count++;
+      }
     }
 
-    dm_set_value(&description_tbl->rows[description_count],
-                 &description_tbl->rows[description_count].Value);
-
-    Serial.printf("[%d] Class=%s  Name=%s  Type=%s  Value=%.4f  constraint_id=%d\n", description_count, description_tbl->rows[description_count].Class ? description_tbl->rows[description_count].Class : "(null)", description_tbl->rows[description_count].Name ? description_tbl->rows[description_count].Name : "(null)", description_tbl->rows[description_count].Type ? description_tbl->rows[description_count].Type : "(null)", description_tbl->rows[description_count].Value, description_tbl->rows[description_count].constraint_id);
-
-    description_count++;
     pos = row_end + 6;
   }
 

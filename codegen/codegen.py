@@ -207,6 +207,10 @@ def gen_validator_js(tables):
         switch_block = "  switch (type) {\n" + "\n".join(cases) + "\n  }\n"
 
     js = (
+        "/* ---------- INSERT BUTTON STATE HELPER ---------- */\n"
+        "/* Insert button stays enabled; validation + alertIfInvalid run at insert time. */\n"
+        "function updateInsertBtn(input) {}\n"
+        "\n"
         "/* ---------- FIELD VALIDATOR (generated from XSD) ---------- */\n"
         f"/* Types found: {', '.join(sorted(types_used))} */\n"
         "function validateField(input) {\n"
@@ -217,6 +221,7 @@ def gen_validator_js(tables):
         '  if (v === "") {\n'
         '    input.classList.remove("invalid");\n'
         '    errSpan.textContent = "";\n'
+        "    updateInsertBtn(input);\n"
         "    return true;\n"
         "  }\n"
         "\n"
@@ -227,11 +232,13 @@ def gen_validator_js(tables):
         "  if (msg) {\n"
         '    input.classList.add("invalid");\n'
         "    errSpan.textContent = msg;\n"
+        "    updateInsertBtn(input);\n"
         "    return false;\n"
         "  }\n"
         "\n"
         '  input.classList.remove("invalid");\n'
         '  errSpan.textContent = "";\n'
+        "  updateInsertBtn(input);\n"
         "  return true;\n"
         "}\n"
     )
@@ -264,10 +271,10 @@ def gen_table_blocks(tables, validity_field_names=None, subcategories=None, hidd
 """
 
         def _render_field(n, typ):
-            if n in validity_field_names:
+            if n in validity_field_names and n != "Type":
                 if n == "Name":
                     oninput = "validateValidityField(this)"
-                    extra = f' data-field="{n}" onblur="alertIfInvalid(this)"'
+                    extra = f' data-field="{n}"'
                 else:
                     oninput = "validateValidityField(this)"
                     extra = f' data-field="{n}"'
@@ -407,15 +414,67 @@ def gen_validity_js():
         "  return dict;\n"
         "}\n"
         "\n"
+        "/* ── Type field: toggle between text input and type/unit dropdown ── */\n"
+        "function _typeFieldSet(nameInput, asDropdown, opts) {\n"
+        "  opts = opts || [\"type\", \"unit\"];\n"
+        '  var form = nameInput.closest(\'[id$="_form"]\');\n'
+        "  if (!form) return;\n"
+        '  var typeEl = form.querySelector(\'[data-name="Type"]\');\n'
+        "  if (!typeEl) return;\n"
+        "  var isSelect = typeEl.tagName === \"SELECT\";\n"
+        "  if (asDropdown && isSelect) {\n"
+        "    var curOpts = (typeEl.dataset.opts || \"\").split(\",\").sort().join(\",\");\n"
+        "    var newOpts = opts.slice().sort().join(\",\");\n"
+        "    if (curOpts === newOpts) return;\n"
+        "  }\n"
+        "  if (!asDropdown && !isSelect) return;\n"
+        "  var parent = typeEl.parentElement;\n"
+        "  var formId = form.id;\n"
+        "  var savedField = typeEl.dataset.field || \"\";\n"
+        "  var savedType  = typeEl.dataset.type  || \"string\";\n"
+        "  if (asDropdown) {\n"
+        "    var sel = document.createElement(\"select\");\n"
+        "    sel.dataset.name = \"Type\";\n"
+        "    sel.dataset.type = savedType;\n"
+        "    sel.dataset.opts = opts.slice().sort().join(\",\");\n"
+        "    var emptyOpt = document.createElement(\"option\");\n"
+        "    emptyOpt.value = \"\"; emptyOpt.textContent = \"\";\n"
+        "    sel.appendChild(emptyOpt);\n"
+        "    opts.forEach(function(opt) {\n"
+        "      var o = document.createElement(\"option\");\n"
+        "      o.value = opt; o.textContent = opt;\n"
+        "      sel.appendChild(o);\n"
+        "    });\n"
+        "    sel.onchange = function() {\n"
+        "      validateField(this);\n"
+        '      var vi = document.getElementById(formId).querySelector(\'[data-field="Value"]\');\n'
+        "      if (vi) validateValidityField(vi);\n"
+        '      var ni = document.getElementById(formId).querySelector(\'[data-field="Name"]\');\n'
+        "      if (ni) validateValidityField(ni);\n"
+        "    };\n"
+        "    parent.replaceChild(sel, typeEl);\n"
+        "  } else {\n"
+        "    var inp = document.createElement(\"input\");\n"
+        "    inp.dataset.name = \"Type\";\n"
+        "    inp.dataset.type = savedType;\n"
+        "    inp.placeholder = savedType;\n"
+        "    if (savedField) inp.dataset.field = savedField;\n"
+        "    inp.oninput = function() {\n"
+        "      validateField(this);\n"
+        '      var vi = document.getElementById(formId).querySelector(\'[data-field="Value"]\');\n'
+        "      if (vi) validateValidityField(vi);\n"
+        '      var ni = document.getElementById(formId).querySelector(\'[data-field="Name"]\');\n'
+        "      if (ni) validateValidityField(ni);\n"
+        "    };\n"
+        "    parent.replaceChild(inp, typeEl);\n"
+        "  }\n"
+        "}\n"
+        "\n"
         "/* Show alert once per error reason — only called from onblur, never from insertRow */\n"
         "function alertIfInvalid(input) {\n"
         "  var errSpan = input.nextElementSibling;\n"
         "  var msg = errSpan ? errSpan.textContent : \"\";\n"
-        '  if (msg === "NO MATCH" || msg === "NO TYPE" || msg === "NO UNIT") {\n'
-        '    var half = input.closest(".half");\n'
-        '    var btn = half ? half.querySelector(".insert-btn") : null;\n'
-        "    if (btn) btn.disabled = true;\n"
-        "  }\n"
+        "  updateInsertBtn(input);\n"
         '  if (msg === "NO MATCH" && input.dataset.lastAlert !== "nomatch") {\n'
         '    input.dataset.lastAlert = "nomatch";\n'
         '    alert("Must Insert Variable Type And Unit First");\n'
@@ -436,15 +495,14 @@ def gen_validity_js():
         "\n"
         '  if (v === "") {\n'
         '    if (fieldName === "Name") {\n'
-        '      var _h = input.closest(".half");\n'
-        '      var _b = _h ? _h.querySelector(".insert-btn") : null;\n'
-        '      if (_b) _b.disabled = false;\n'
         '      input.dataset.lastAlert = "";\n'
+        "      _typeFieldSet(input, false);\n"
         '    }\n'
         '    input.style.borderColor = "";\n'
         '    input.classList.remove("invalid");\n'
         '    errSpan.textContent = "";\n'
         '    errSpan.style.color = "";\n'
+        "    updateInsertBtn(input);\n"
         "    return true;\n"
         "  }\n"
         "\n"
@@ -463,6 +521,7 @@ def gen_validity_js():
         '      errSpan.textContent = "";\n'
         '      errSpan.style.color = "";\n'
         '      input.dataset.lastAlert = "";\n'
+        "      updateInsertBtn(input);\n"
         "      return true;\n"
         "    }\n"
         '    var classInput = form ? form.querySelector(\'[data-name="Class"]\') : null;\n'
@@ -478,8 +537,8 @@ def gen_validity_js():
         '      input.classList.add("invalid");\n'
         '      errSpan.textContent = "NO MATCH";\n'
         '      errSpan.style.color = "red";\n'
-        "      if (insertBtn) insertBtn.disabled = true;\n"
         '      input.dataset.lastAlert = "";\n'
+        "      updateInsertBtn(input);\n"
         "      return false;\n"
         "    }\n"
         "\n"
@@ -488,12 +547,13 @@ def gen_validity_js():
         "      return k.toLowerCase() === v.toLowerCase();\n"
         "    });\n"
         "    if (!nameKey) {\n"
+        "      _typeFieldSet(input, true);\n"
         '      input.style.borderColor = "red";\n'
         '      input.classList.add("invalid");\n'
         '      errSpan.textContent = "NO MATCH";\n'
         '      errSpan.style.color = "red";\n'
-        "      if (insertBtn) insertBtn.disabled = true;\n"
         '      input.dataset.lastAlert = "";\n'
+        "      updateInsertBtn(input);\n"
         "      return false;\n"
         "    }\n"
         "\n"
@@ -504,11 +564,12 @@ def gen_validity_js():
         '      return k.toLowerCase() === "type";\n'
         "    });\n"
         "    if (!typeRowKey) {\n"
+        "      _typeFieldSet(input, true);\n"
         '      input.style.borderColor = "red";\n'
         '      input.classList.add("invalid");\n'
         '      errSpan.textContent = "NO TYPE";\n'
         '      errSpan.style.color = "red";\n'
-        "      if (insertBtn) insertBtn.disabled = true;\n"
+        "      updateInsertBtn(input);\n"
         "      return false;\n"
         "    }\n"
         "\n"
@@ -530,7 +591,8 @@ def gen_validity_js():
         "\n"
         "    /* ── Step 4: bool/choice → name already validated in Step 1 ── */\n"
         '    if (typeLabel === "bool" || typeLabel === "choice") {\n'
-        "      if (insertBtn) insertBtn.disabled = false;\n"
+        "      _typeFieldSet(input, false);\n"
+        "      updateInsertBtn(input);\n"
         "      return true;\n"
         "    }\n"
         "\n"
@@ -539,11 +601,12 @@ def gen_validity_js():
         '      return k.toLowerCase() === "unit";\n'
         "    });\n"
         "    if (!unitRowKey) {\n"
+        '      _typeFieldSet(input, true, ["unit"]);\n'
         '      input.style.borderColor = "red";\n'
         '      input.classList.add("invalid");\n'
         '      errSpan.textContent = "NO UNIT";\n'
         '      errSpan.style.color = "red";\n'
-        "      if (insertBtn) insertBtn.disabled = true;\n"
+        "      updateInsertBtn(input);\n"
         "      return false;\n"
         "    }\n"
         "\n"
@@ -558,12 +621,13 @@ def gen_validity_js():
         "    var uMsg = (uClassKey && dict[uClassKey].hasOwnProperty(uKeyNorm))\n"
         "      ? dict[uClassKey][uKeyNorm] : null;\n"
         "    if (uMsg !== null) {\n"
+        "      _typeFieldSet(input, false);\n"
         '      input.style.borderColor = "green";\n'
         '      input.classList.remove("invalid");\n'
         "      errSpan.textContent = uMsg.toUpperCase();\n"
         '      errSpan.style.color = "green";\n'
-        "      if (insertBtn) insertBtn.disabled = false;\n"
         '      input.dataset.lastAlert = "";\n'
+        "      updateInsertBtn(input);\n"
         "      return true;\n"
         "    }\n"
         "    /* unit row present but key missing from Metadata */\n"
@@ -571,7 +635,7 @@ def gen_validity_js():
         '    input.classList.add("invalid");\n'
         '    errSpan.textContent = "NO UNIT";\n'
         '    errSpan.style.color = "red";\n'
-        "    if (insertBtn) insertBtn.disabled = true;\n"
+        "    updateInsertBtn(input);\n"
         "    return false;\n"
         "  }\n"
         "\n"
@@ -596,6 +660,7 @@ def gen_validity_js():
         '      input.classList.remove("invalid");\n'
         '      errSpan.textContent = "";\n'
         '      errSpan.style.color = "";\n'
+        "      updateInsertBtn(input);\n"
         "      return true;\n"
         "    }\n"
         "  }\n"
@@ -606,6 +671,7 @@ def gen_validity_js():
         '    input.classList.add("invalid");\n'
         '    errSpan.textContent = "NO MATCH";\n'
         '    errSpan.style.color = "red";\n'
+        "    updateInsertBtn(input);\n"
         "    return false;\n"
         "  }\n"
         "\n"
@@ -615,6 +681,7 @@ def gen_validity_js():
         '    input.classList.add("invalid");\n'
         '    errSpan.textContent = "MISMATCH";\n'
         '    errSpan.style.color = "red";\n'
+        "    updateInsertBtn(input);\n"
         "    return false;\n"
         "  }\n"
         "\n"
@@ -623,6 +690,7 @@ def gen_validity_js():
         '  input.classList.remove("invalid");\n'
         "  errSpan.textContent = dict[classKey][v].toUpperCase();\n"
         '  errSpan.style.color = "green";\n'
+        "  updateInsertBtn(input);\n"
         "  return true;\n"
         "}\n"
     )
@@ -637,7 +705,7 @@ def c_ident(name):
     return name.replace(" ", "_").replace("-", "_")
 
 
-def _gen_subcat_block(lines, t, subcat_name, subcat_fields, field_map, has_value_ptr=False, max_rows=MAX_ROWS, has_constraint_id=False):
+def _gen_subcat_block(lines, t, subcat_name, subcat_fields, field_map, has_value_ptr=False, max_rows=MAX_ROWS, has_constraint_id=False, has_next_id=False):
     """Generate enum, struct, table for one subcategory of a table."""
     tl = t.lower()
     tu = t.upper()
@@ -685,6 +753,8 @@ def _gen_subcat_block(lines, t, subcat_name, subcat_fields, field_map, has_value
         lines.append(f"  float *value_ptr;   /* points to description struct Value field */")
     if has_constraint_id:
         lines.append(f"  int constraint_id;   /* index into constraints table, -1 if no constraints row */")
+    if has_next_id:
+        lines.append(f"  int constraints_id;  /* next constraints row for this variable, -1 = none */")
     lines.append(f"}} {prefix}_row_t;")
     lines.append("")
 
@@ -770,9 +840,10 @@ def gen_c_schema_h(tables, subcategories=None, settings_subcats=None, settings_f
                 sc_fields = subcats[sc_name]
                 has_value_ptr = sc_name.lower() in ("modbus", "constraints")
                 has_constraint_id = "Value" in subcats[sc_name]
+                has_next_id = sc_name.lower() == "constraints"
                 lines.append(f"/* ─── {t} / {sc_name} ─── */")
                 lines.append("")
-                _gen_subcat_block(lines, t, sc_name, sc_fields, field_map, has_value_ptr, max_rows, has_constraint_id)
+                _gen_subcat_block(lines, t, sc_name, sc_fields, field_map, has_value_ptr, max_rows, has_constraint_id, has_next_id)
         else:
             # No subcategories — flat struct (original behaviour)
             n_cols = len(fields)
@@ -1118,7 +1189,8 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                     typ = field_map[fn]
                     _gen_field_extract(lines, fn, typ, prefix, PREFIX, tbl_var, idx=f"{src_sl}_count")
 
-                # Optional subcats — temp vars then conditional commit
+                # Pre-collect optional subcat metadata for both extraction and commit phases
+                osc_info = []
                 for osc in optional_scs:
                     osl = osc.lower()
                     osu = osc.upper()
@@ -1127,12 +1199,15 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                     ofields = [(fn, field_map[fn]) for fn in subcats[osc]]
                     numeric_fields = [(fn, typ) for fn, typ in ofields if typ in C_NUMERIC_TYPES]
                     temp_vars = [(c_ident(fn), f"_t_{c_ident(fn)}") for fn, _ in numeric_fields]
+                    cond = " || ".join(f"{tv} != -9999.0f" for _, tv in temp_vars) if temp_vars else None
+                    osc_info.append((osc, osl, osu, prefix_o, PREFIX_O, ofields, temp_vars, cond))
 
+                # Phase A: extract all optional subcat temp vars (before any commit)
+                for osc, osl, osu, prefix_o, PREFIX_O, ofields, temp_vars, cond in osc_info:
                     lines.append(f"    /* ── {osc}: parse into temporaries, commit only if any field is non-default ── */")
                     if temp_vars:
                         lines.append(f"    float {', '.join(tv for _, tv in temp_vars)};")
                     lines.append("")
-
                     for fn, typ in ofields:
                         ci = c_ident(fn)
                         ci_upper = ci.upper()
@@ -1146,39 +1221,55 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                             lines.append(f"    {temp} = buf[0] ? (float)atof(buf) : -9999.0f;")
                         lines.append("")
 
-                    if temp_vars:
-                        cond = " || ".join(f"{tv} != -9999.0f" for _, tv in temp_vars)
-                        lines.append(f"    if ({cond}) {{")
-                        lines.append(f"      /* at least one {osc} field is real — commit this row */")
+                use_hashmap = t in dm_subcat_tables and src_sc
+                sv = f"{src_sl}_tbl"
+                si = f"{src_sl}_count"
+
+                if use_hashmap:
+                    # Hashmap lookup: check if var is already registered in the DM
+                    lines.append(f"    /* ── hashmap lookup: check if var already registered ── */")
+                    lines.append(f"    uint16_t _cls_idx = INVALID_INDEX;")
+                    lines.append(f"    uint16_t _var_pool_id = INVALID_INDEX;")
+                    lines.append(f"    if ({sv}->rows[{si}].Class && {sv}->rows[{si}].Name && {sv}->rows[{si}].Type) {{")
+                    lines.append(f"      _cls_idx = dm_class_map_find({sv}->rows[{si}].Class);")
+                    lines.append(f"      if (_cls_idx != INVALID_INDEX)")
+                    lines.append(f"        _var_pool_id = dm_var_map_find(_cls_idx, {sv}->rows[{si}].Name, {sv}->rows[{si}].Type);")
+                    lines.append(f"    }}")
+                    lines.append(f"    if (_var_pool_id == INVALID_INDEX) {{")
+                    p = "  "  # extra indent inside new-var branch
+                else:
+                    p = ""
+
+                # Phase B: commit blocks for all optional subcats
+                for osc, osl, osu, prefix_o, PREFIX_O, ofields, temp_vars, cond in osc_info:
+                    if temp_vars and cond:
+                        lines.append(f"{p}    if ({cond}) {{")
+                        lines.append(f"{p}      /* at least one {osc} field is real — commit this row */")
                         for fn, typ in ofields:
                             if typ in C_NUMERIC_TYPES:
                                 ci = c_ident(fn)
                                 temp = f"_t_{ci}"
-                                lines.append(f"      {osl}_tbl->rows[{osl}_count].{ci} = {temp};")
-                        lines.append(f"      {osl}_tbl->rows[{osl}_count].value_ptr = &{src_sl}_tbl->rows[{src_sl}_count].Value;")
+                                lines.append(f"{p}      {osl}_tbl->rows[{osl}_count].{ci} = {temp};")
+                        lines.append(f"{p}      {osl}_tbl->rows[{osl}_count].value_ptr = &{src_sl}_tbl->rows[{src_sl}_count].Value;")
                         if "constraint" in osl:
-                            lines.append(f"      {src_sl}_tbl->rows[{src_sl}_count].constraint_id = {osl}_count;")
-                            # Populate increment_pool directly if Increment is non-null
+                            lines.append(f"{p}      {osl}_tbl->rows[{osl}_count].constraints_id = -1;")
+                            lines.append(f"{p}      {src_sl}_tbl->rows[{src_sl}_count].constraint_id = {osl}_count;")
                             inc_temp = next((tv for fn, tv in temp_vars if c_ident(fn) == "Increment"), None)
                             if inc_temp:
-                                lines.append(f"      if ({inc_temp} != -9999.0f) {{")
-                                lines.append(f"        increment_pool.rows[increment_pool.count].Increment = {inc_temp};")
-                                lines.append(f"        increment_pool.rows[increment_pool.count].value_ptr = &{src_sl}_tbl->rows[{src_sl}_count].Value;")
-                                lines.append(f"        increment_pool.count++;")
-                                lines.append(f"      }}")
-                        lines.append(f"      {osl}_count++;")
-                        lines.append("    } else {")
+                                lines.append(f"{p}      if ({inc_temp} != -9999.0f) {{")
+                                lines.append(f"{p}        increment_pool.rows[increment_pool.count].Increment = {inc_temp};")
+                                lines.append(f"{p}        increment_pool.rows[increment_pool.count].value_ptr = &{src_sl}_tbl->rows[{src_sl}_count].Value;")
+                                lines.append(f"{p}        increment_pool.count++;")
+                                lines.append(f"{p}      }}")
+                        lines.append(f"{p}      {osl}_count++;")
+                        lines.append(f"{p}    }} else {{")
                         if "constraint" in osl:
-                            lines.append(f"      {src_sl}_tbl->rows[{src_sl}_count].constraint_id = -1;")
-                        lines.append("    }")
+                            lines.append(f"{p}      {src_sl}_tbl->rows[{src_sl}_count].constraint_id = -1;")
+                        lines.append(f"{p}    }}")
                         lines.append("")
 
-                if t in dm_subcat_tables and src_sc:
-                    sv = f"{src_sl}_tbl"
-                    si = f"{src_sl}_count"
-                    lines.append(f"    dm_set_value(&{sv}->rows[{si}],")
-                    lines.append(f"                 &{sv}->rows[{si}].Value);")
-                    lines.append("")
+                # dm_set_value + debug printf + description_count++ (new-var path)
+                if use_hashmap:
                     sc_fields_typed = [(fn, field_map[fn]) for fn in subcats[src_sc]]
                     printf_fmts = []
                     printf_args_list = []
@@ -1197,9 +1288,47 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                     printf_args_list.append(f"{sv}->rows[{si}].constraint_id")
                     fmt_str = "  ".join(printf_fmts)
                     all_args = ", ".join([si] + printf_args_list)
-                    lines.append(f'    Serial.printf("[%d] {fmt_str}\\n", {all_args});')
+                    lines.append(f"      dm_set_value(&{sv}->rows[{si}],")
+                    lines.append(f"                   &{sv}->rows[{si}].Value);")
                     lines.append("")
-                lines.append(f"    {src_sl}_count++;")
+                    lines.append(f'      Serial.printf("[%d] {fmt_str}\\n", {all_args});')
+                    lines.append("")
+                    lines.append(f"      {src_sl}_count++;")
+                    lines.append(f"    }} else {{")
+                    lines.append(f"      /* ── EXISTING VAR: append constraint to chain; value_ptr → original var's Value ── */")
+                    # Generate constraint chain-walk for existing var
+                    for osc, osl, osu, prefix_o, PREFIX_O, ofields, temp_vars, cond in osc_info:
+                        if "constraint" in osl and temp_vars and cond:
+                            inc_temp = next((tv for fn, tv in temp_vars if c_ident(fn) == "Increment"), None)
+                            lines.append(f"      if ({cond}) {{")
+                            for fn, typ in ofields:
+                                if typ in C_NUMERIC_TYPES:
+                                    ci = c_ident(fn)
+                                    temp = f"_t_{ci}"
+                                    lines.append(f"        {osl}_tbl->rows[{osl}_count].{ci} = {temp};")
+                            lines.append(f"        {osl}_tbl->rows[{osl}_count].value_ptr = (float *)var_pool[_var_pool_id].ext_addr;")
+                            lines.append(f"        {osl}_tbl->rows[{osl}_count].constraints_id = -1;")
+                            lines.append(f"        if (var_pool[_var_pool_id].constraint_idx == INVALID_INDEX) {{")
+                            lines.append(f"          var_pool[_var_pool_id].constraint_idx = {osl}_count;")
+                            lines.append(f"        }} else {{")
+                            lines.append(f"          int _chain_idx = (int)var_pool[_var_pool_id].constraint_idx;")
+                            lines.append(f"          while ({osl}_tbl->rows[_chain_idx].constraints_id != -1)")
+                            lines.append(f"            _chain_idx = {osl}_tbl->rows[_chain_idx].constraints_id;")
+                            lines.append(f"          {osl}_tbl->rows[_chain_idx].constraints_id = {osl}_count;")
+                            lines.append(f"        }}")
+                            if inc_temp:
+                                lines.append(f"        if ({inc_temp} != -9999.0f) {{")
+                                lines.append(f"          increment_pool.rows[increment_pool.count].Increment = {inc_temp};")
+                                lines.append(f"          increment_pool.rows[increment_pool.count].value_ptr = (float *)var_pool[_var_pool_id].ext_addr;")
+                                lines.append(f"          increment_pool.count++;")
+                                lines.append(f"        }}")
+                            lines.append(f"        {osl}_count++;")
+                            lines.append(f"      }}")
+                    lines.append(f"    }}")
+                    lines.append("")
+                else:
+                    lines.append(f"    {src_sl}_count++;")
+
                 lines.append("    pos = row_end + 6;")
                 lines.append("  }")
                 lines.append("")
@@ -1773,25 +1902,50 @@ function insertRow(table, schema) {
 
   if (!state[table]) state[table] = [];
 
-  const inputs = document.querySelectorAll(`#${table}_form input`);
+  const inputs = document.querySelectorAll(`#${table}_form input, #${table}_form select`);
 
-  /* validate all fields (no alerts — alertIfInvalid is only wired to onblur) */
+  /* validate all fields; alert on Name field errors at insert time */
   let valid = true;
   inputs.forEach(inp => {
     const fn = inp.dataset.field ? validateValidityField : validateField;
     if (!fn(inp)) valid = false;
   });
-  if (!valid) return;
+  if (!valid) {
+    const nameInp = document.querySelector(`#${table}_form [data-field="Name"]`);
+    if (nameInp) { nameInp.dataset.lastAlert = ""; alertIfInvalid(nameInp); }
+    return;
+  }
 
   const row = [];
   for (let i = 0; i < inputs.length; i++) {
-    const v = inputs[i].value.trim();
+    const el = inputs[i];
+    const v = el.value.trim();
     row.push(v === "" ? null : v);
-    inputs[i].value = "";
-    inputs[i].style.borderColor = "";
-    inputs[i].classList.remove("invalid");
-    inputs[i].nextElementSibling.textContent = "";
-    inputs[i].nextElementSibling.style.color = "";
+    /* revert any Type select back to an input before clearing */
+    if (el.tagName === "SELECT") {
+      const savedType  = el.dataset.type  || "string";
+      const savedField = el.dataset.field || "";
+      const fId = table + "_form";
+      const inp2 = document.createElement("input");
+      inp2.dataset.name = "Type";
+      inp2.dataset.type = savedType;
+      inp2.placeholder = savedType;
+      if (savedField) inp2.dataset.field = savedField;
+      inp2.oninput = function() {
+        validateField(this);
+        var ni = document.getElementById(fId).querySelector('[data-field="Name"]');
+        if (ni) validateValidityField(ni);
+      };
+      el.parentElement.replaceChild(inp2, el);
+      inp2.nextElementSibling.textContent = "";
+      inp2.nextElementSibling.style.color = "";
+      continue;
+    }
+    el.value = "";
+    el.style.borderColor = "";
+    el.classList.remove("invalid");
+    el.nextElementSibling.textContent = "";
+    el.nextElementSibling.style.color = "";
   }
 
   if (row.every(v => v === null)) return;
@@ -1806,6 +1960,31 @@ function renderTable(table, schema) {
 
   const body = document.getElementById(table + "_body");
   body.innerHTML = "";
+
+  const TYPE_PINNED = ["type", "unit"];
+  function _typeRank(v) {
+    const i = TYPE_PINNED.indexOf(String(v ?? "").toLowerCase());
+    return i >= 0 ? i : TYPE_PINNED.length;
+  }
+  function _cmp(va, vb) {
+    const na = parseFloat(va), nb = parseFloat(vb);
+    return (!isNaN(na) && !isNaN(nb)) ? na - nb : String(va).localeCompare(String(vb));
+  }
+  if (table === "Metadata") {
+    const ci = schema.findIndex(f => f.name === "Class");
+    const ki = schema.findIndex(f => f.name === "Key");
+    state[table].sort((a, b) =>
+      _cmp(a[ci] ?? "", b[ci] ?? "") || _cmp(a[ki] ?? "", b[ki] ?? ""));
+  } else if (table === "Variables") {
+    const ci = schema.findIndex(f => f.name === "Class");
+    const ni = schema.findIndex(f => f.name === "Name");
+    const ti = schema.findIndex(f => f.name === "Type");
+    state[table].sort((a, b) =>
+      _cmp(a[ci] ?? "", b[ci] ?? "") ||
+      _cmp(a[ni] ?? "", b[ni] ?? "") ||
+      (_typeRank(a[ti]) - _typeRank(b[ti])) ||
+      _cmp(a[ti] ?? "", b[ti] ?? ""));
+  }
 
   state[table].forEach((r, i) => {
     let tr = "<tr>";
@@ -2246,6 +2425,19 @@ async function submitAll() {
     }
   }
 }
+
+
+/* ---------- ENTER KEY → INSERT / SAVE ---------- */
+/* Pressing Enter in any text input fires the nearest enabled Insert/Save button. */
+document.addEventListener("keydown", function(e) {
+  if (e.key !== "Enter") return;
+  var input = e.target;
+  if (input.tagName !== "INPUT" || input.type === "checkbox") return;
+  var container = input.closest(".half") || input.closest(".settings-bar");
+  if (!container) return;
+  var btn = container.querySelector(".insert-btn");
+  if (btn && !btn.disabled) btn.click();
+});
 """
 
 
@@ -2260,8 +2452,8 @@ def import_zip(zip_path):
     zip_path  = os.path.abspath(zip_path)
 
     if not os.path.isfile(zip_path):
-        print(f"ERROR: ZIP not found: {zip_path}")
-        sys.exit(1)
+        print(f"WARNING: ZIP not found: {zip_path} — skipping import, using existing XMLs.")
+        return
 
     with zipfile.ZipFile(zip_path, "r") as zf:
         extracted = []

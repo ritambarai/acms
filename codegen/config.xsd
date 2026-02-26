@@ -106,9 +106,9 @@
         <xs:element name="row" maxOccurs="unbounded">
           <xs:complexType>
             <xs:sequence>
+              <xs:element name="Class"   type="xs:string" minOccurs="1" maxOccurs="1"/>
               <xs:element name="Key"     type="xs:float"  minOccurs="1" maxOccurs="1"/>
               <xs:element name="Message" type="xs:string" minOccurs="1" maxOccurs="1"/>
-              <xs:element name="Class"   type="xs:string" minOccurs="1" maxOccurs="1"/>
             </xs:sequence>
           </xs:complexType>
         </xs:element>
@@ -128,6 +128,7 @@
               <xs:element name="validation">
                 <xs:complexType><xs:sequence>
                   <xs:element name="Name" type="xs:string"/>
+                  <xs:element name="Type" type="xs:string"/>
                 </xs:sequence></xs:complexType>
               </xs:element>
 

@@ -1,3 +1,7 @@
+/* ---------- INSERT BUTTON STATE HELPER ---------- */
+/* Insert button stays enabled; validation + alertIfInvalid run at insert time. */
+function updateInsertBtn(input) {}
+
 /* ---------- FIELD VALIDATOR (generated from XSD) ---------- */
 /* Types found: boolean, float, integer, string */
 function validateField(input) {
@@ -8,6 +12,7 @@ function validateField(input) {
   if (v === "") {
     input.classList.remove("invalid");
     errSpan.textContent = "";
+    updateInsertBtn(input);
     return true;
   }
 
@@ -28,11 +33,13 @@ function validateField(input) {
   if (msg) {
     input.classList.add("invalid");
     errSpan.textContent = msg;
+    updateInsertBtn(input);
     return false;
   }
 
   input.classList.remove("invalid");
   errSpan.textContent = "";
+  updateInsertBtn(input);
   return true;
 }
 
@@ -95,15 +102,67 @@ function buildVariableDict() {
   return dict;
 }
 
+/* ── Type field: toggle between text input and type/unit dropdown ── */
+function _typeFieldSet(nameInput, asDropdown, opts) {
+  opts = opts || ["type", "unit"];
+  var form = nameInput.closest('[id$="_form"]');
+  if (!form) return;
+  var typeEl = form.querySelector('[data-name="Type"]');
+  if (!typeEl) return;
+  var isSelect = typeEl.tagName === "SELECT";
+  if (asDropdown && isSelect) {
+    var curOpts = (typeEl.dataset.opts || "").split(",").sort().join(",");
+    var newOpts = opts.slice().sort().join(",");
+    if (curOpts === newOpts) return;
+  }
+  if (!asDropdown && !isSelect) return;
+  var parent = typeEl.parentElement;
+  var formId = form.id;
+  var savedField = typeEl.dataset.field || "";
+  var savedType  = typeEl.dataset.type  || "string";
+  if (asDropdown) {
+    var sel = document.createElement("select");
+    sel.dataset.name = "Type";
+    sel.dataset.type = savedType;
+    sel.dataset.opts = opts.slice().sort().join(",");
+    var emptyOpt = document.createElement("option");
+    emptyOpt.value = ""; emptyOpt.textContent = "";
+    sel.appendChild(emptyOpt);
+    opts.forEach(function(opt) {
+      var o = document.createElement("option");
+      o.value = opt; o.textContent = opt;
+      sel.appendChild(o);
+    });
+    sel.onchange = function() {
+      validateField(this);
+      var vi = document.getElementById(formId).querySelector('[data-field="Value"]');
+      if (vi) validateValidityField(vi);
+      var ni = document.getElementById(formId).querySelector('[data-field="Name"]');
+      if (ni) validateValidityField(ni);
+    };
+    parent.replaceChild(sel, typeEl);
+  } else {
+    var inp = document.createElement("input");
+    inp.dataset.name = "Type";
+    inp.dataset.type = savedType;
+    inp.placeholder = savedType;
+    if (savedField) inp.dataset.field = savedField;
+    inp.oninput = function() {
+      validateField(this);
+      var vi = document.getElementById(formId).querySelector('[data-field="Value"]');
+      if (vi) validateValidityField(vi);
+      var ni = document.getElementById(formId).querySelector('[data-field="Name"]');
+      if (ni) validateValidityField(ni);
+    };
+    parent.replaceChild(inp, typeEl);
+  }
+}
+
 /* Show alert once per error reason — only called from onblur, never from insertRow */
 function alertIfInvalid(input) {
   var errSpan = input.nextElementSibling;
   var msg = errSpan ? errSpan.textContent : "";
-  if (msg === "NO MATCH" || msg === "NO TYPE" || msg === "NO UNIT") {
-    var half = input.closest(".half");
-    var btn = half ? half.querySelector(".insert-btn") : null;
-    if (btn) btn.disabled = true;
-  }
+  updateInsertBtn(input);
   if (msg === "NO MATCH" && input.dataset.lastAlert !== "nomatch") {
     input.dataset.lastAlert = "nomatch";
     alert("Must Insert Variable Type And Unit First");
@@ -124,15 +183,14 @@ function validateValidityField(input) {
 
   if (v === "") {
     if (fieldName === "Name") {
-      var _h = input.closest(".half");
-      var _b = _h ? _h.querySelector(".insert-btn") : null;
-      if (_b) _b.disabled = false;
       input.dataset.lastAlert = "";
+      _typeFieldSet(input, false);
     }
     input.style.borderColor = "";
     input.classList.remove("invalid");
     errSpan.textContent = "";
     errSpan.style.color = "";
+    updateInsertBtn(input);
     return true;
   }
 
@@ -151,6 +209,7 @@ function validateValidityField(input) {
       errSpan.textContent = "";
       errSpan.style.color = "";
       input.dataset.lastAlert = "";
+      updateInsertBtn(input);
       return true;
     }
     var classInput = form ? form.querySelector('[data-name="Class"]') : null;
@@ -166,8 +225,8 @@ function validateValidityField(input) {
       input.classList.add("invalid");
       errSpan.textContent = "NO MATCH";
       errSpan.style.color = "red";
-      if (insertBtn) insertBtn.disabled = true;
       input.dataset.lastAlert = "";
+      updateInsertBtn(input);
       return false;
     }
 
@@ -176,12 +235,13 @@ function validateValidityField(input) {
       return k.toLowerCase() === v.toLowerCase();
     });
     if (!nameKey) {
+      _typeFieldSet(input, true);
       input.style.borderColor = "red";
       input.classList.add("invalid");
       errSpan.textContent = "NO MATCH";
       errSpan.style.color = "red";
-      if (insertBtn) insertBtn.disabled = true;
       input.dataset.lastAlert = "";
+      updateInsertBtn(input);
       return false;
     }
 
@@ -192,11 +252,12 @@ function validateValidityField(input) {
       return k.toLowerCase() === "type";
     });
     if (!typeRowKey) {
+      _typeFieldSet(input, true);
       input.style.borderColor = "red";
       input.classList.add("invalid");
       errSpan.textContent = "NO TYPE";
       errSpan.style.color = "red";
-      if (insertBtn) insertBtn.disabled = true;
+      updateInsertBtn(input);
       return false;
     }
 
@@ -218,7 +279,8 @@ function validateValidityField(input) {
 
     /* ── Step 4: bool/choice → name already validated in Step 1 ── */
     if (typeLabel === "bool" || typeLabel === "choice") {
-      if (insertBtn) insertBtn.disabled = false;
+      _typeFieldSet(input, false);
+      updateInsertBtn(input);
       return true;
     }
 
@@ -227,11 +289,12 @@ function validateValidityField(input) {
       return k.toLowerCase() === "unit";
     });
     if (!unitRowKey) {
+      _typeFieldSet(input, true, ["unit"]);
       input.style.borderColor = "red";
       input.classList.add("invalid");
       errSpan.textContent = "NO UNIT";
       errSpan.style.color = "red";
-      if (insertBtn) insertBtn.disabled = true;
+      updateInsertBtn(input);
       return false;
     }
 
@@ -246,12 +309,13 @@ function validateValidityField(input) {
     var uMsg = (uClassKey && dict[uClassKey].hasOwnProperty(uKeyNorm))
       ? dict[uClassKey][uKeyNorm] : null;
     if (uMsg !== null) {
+      _typeFieldSet(input, false);
       input.style.borderColor = "green";
       input.classList.remove("invalid");
       errSpan.textContent = uMsg.toUpperCase();
       errSpan.style.color = "green";
-      if (insertBtn) insertBtn.disabled = false;
       input.dataset.lastAlert = "";
+      updateInsertBtn(input);
       return true;
     }
     /* unit row present but key missing from Metadata */
@@ -259,7 +323,7 @@ function validateValidityField(input) {
     input.classList.add("invalid");
     errSpan.textContent = "NO UNIT";
     errSpan.style.color = "red";
-    if (insertBtn) insertBtn.disabled = true;
+    updateInsertBtn(input);
     return false;
   }
 
@@ -284,6 +348,7 @@ function validateValidityField(input) {
       input.classList.remove("invalid");
       errSpan.textContent = "";
       errSpan.style.color = "";
+      updateInsertBtn(input);
       return true;
     }
   }
@@ -294,6 +359,7 @@ function validateValidityField(input) {
     input.classList.add("invalid");
     errSpan.textContent = "NO MATCH";
     errSpan.style.color = "red";
+    updateInsertBtn(input);
     return false;
   }
 
@@ -303,6 +369,7 @@ function validateValidityField(input) {
     input.classList.add("invalid");
     errSpan.textContent = "MISMATCH";
     errSpan.style.color = "red";
+    updateInsertBtn(input);
     return false;
   }
 
@@ -311,5 +378,6 @@ function validateValidityField(input) {
   input.classList.remove("invalid");
   errSpan.textContent = dict[classKey][v].toUpperCase();
   errSpan.style.color = "green";
+  updateInsertBtn(input);
   return true;
 }

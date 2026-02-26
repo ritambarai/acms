@@ -9,27 +9,27 @@
 /* ═══════ Metadata ═══════ */
 
 typedef enum {
+  COL_METADATA_CLASS_STRING,
   COL_METADATA_KEY_FLOAT,
   COL_METADATA_MESSAGE_STRING,
-  COL_METADATA_CLASS_STRING,
 } metadata_col_type_t;
 
 #define METADATA_COL_COUNT 3
 
 static const metadata_col_type_t metadata_column_types[METADATA_COL_COUNT] = {
+  COL_METADATA_CLASS_STRING,
   COL_METADATA_KEY_FLOAT,
   COL_METADATA_MESSAGE_STRING,
-  COL_METADATA_CLASS_STRING,
 };
 
 static const char *metadata_column_names[METADATA_COL_COUNT] = {
-  "Key", "Message", "Class"
+  "Class", "Key", "Message"
 };
 
 typedef struct {
+  char* Class;
   float Key;
   char* Message;
-  char* Class;
 } metadata_row_t;
 
 #define MAX_METADATA_ROWS 128
@@ -134,6 +134,7 @@ typedef struct {
   float Fault_Code;
   float Increment;
   float *value_ptr;   /* points to description struct Value field */
+  int constraints_id;  /* next constraints row for this variable, -1 = none */
 } variables_constraints_row_t;
 
 #define MAX_VARIABLES_CONSTRAINTS_ROWS 128
