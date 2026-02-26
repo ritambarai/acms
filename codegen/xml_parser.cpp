@@ -422,12 +422,12 @@ static void parse_settings_xml(const char *xml) {
       extract_tag(row_start, "Alert_Topic", buf, sizeof(buf));
       if (settings_mqtt.Alert_Topic) { free(settings_mqtt.Alert_Topic); settings_mqtt.Alert_Topic = NULL; }
       if (buf[0]) settings_mqtt.Alert_Topic = strdup(buf);
-      extract_tag(row_start, "Username", buf, sizeof(buf));
-      if (settings_mqtt.Username) { free(settings_mqtt.Username); settings_mqtt.Username = NULL; }
-      if (buf[0]) settings_mqtt.Username = strdup(buf);
-      extract_tag(row_start, "Password", buf, sizeof(buf));
-      if (settings_mqtt.Password) { free(settings_mqtt.Password); settings_mqtt.Password = NULL; }
-      if (buf[0]) settings_mqtt.Password = strdup(buf);
+      extract_tag(row_start, "Mqtt_Username", buf, sizeof(buf));
+      if (settings_mqtt.Mqtt_Username) { free(settings_mqtt.Mqtt_Username); settings_mqtt.Mqtt_Username = NULL; }
+      if (buf[0]) settings_mqtt.Mqtt_Username = strdup(buf);
+      extract_tag(row_start, "Mqtt_Password", buf, sizeof(buf));
+      if (settings_mqtt.Mqtt_Password) { free(settings_mqtt.Mqtt_Password); settings_mqtt.Mqtt_Password = NULL; }
+      if (buf[0]) settings_mqtt.Mqtt_Password = strdup(buf);
     }
 
     /* ── json includes ── */

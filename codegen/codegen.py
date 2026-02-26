@@ -2094,7 +2094,7 @@ def gen_settings_block(name, subcats, fields):
                     html += f'              <label>{label}</label>\n'
                     if typ == "boolean":
                         html += (f'              <input type="checkbox" data-type="{typ}"'
-                                 f' data-name="{fn}" class="settings-checkbox" onchange="settingsChanged()">\n')
+                                 f' data-name="{fn}" class="settings-checkbox" onchange="saveCheckboxSetting(this)">\n')
                     else:
                         max_attr = f' max="{cap}"' if cap else ""
                         html += (f'              <input placeholder="{typ}" data-type="{typ}"'
@@ -2114,7 +2114,7 @@ def gen_settings_block(name, subcats, fields):
                 html += f'          <label>{label}</label>\n'
                 if typ == "boolean":
                     html += (f'          <input type="checkbox" data-type="{typ}"'
-                             f' data-name="{fn}" class="settings-checkbox" onchange="settingsChanged()">\n')
+                             f' data-name="{fn}" class="settings-checkbox" onchange="saveCheckboxSetting(this)">\n')
                 else:
                     max_attr = f' max="{cap}"' if cap else ""
                     html += (f'          <input placeholder="{typ}" data-type="{typ}"'
@@ -2562,6 +2562,22 @@ function settingsChanged() {
   if (rewind) rewind.disabled = false;
 }
 
+/* ---------- AUTO-SAVE BOOLEAN SETTING ON CHECKBOX TOGGLE ---------- */
+async function saveCheckboxSetting(el) {
+  state["Settings"][el.dataset.name] = String(el.checked);
+  if (location.hostname === "") return;
+  try {
+    const r = await fetch("/Settings.xml", {
+      method: "POST",
+      headers: { "Content-Type": "application/xml" },
+      body: settingsToXML()
+    });
+    if (!r.ok) console.error("[ACMS] Checkbox save failed (" + r.status + ")");
+  } catch(e) {
+    console.error("[ACMS] Checkbox save error:", e);
+  }
+}
+
 /* ---------- REWIND SETTINGS ---------- */
 function rewindSettings() {
   document.querySelectorAll(".settings-bar input[data-name]").forEach(function(inp) {
@@ -2617,7 +2633,8 @@ function settingsToXML() {
   var xml = "<Settings>\\n";
   Object.keys(Settings_SUBCATS).forEach(function(sc) {
     var sc_val = Settings_SUBCATS[sc];
-    xml += "  <row><" + sc + ">";
+    var tag = sc.replace(/[^a-zA-Z0-9_]/g, "_");
+    xml += "  <row><" + tag + ">";
     if (Array.isArray(sc_val)) {
       sc_val.forEach(function(field) {
         var val = (state["Settings"][field] !== undefined) ? state["Settings"][field] : "";
@@ -2633,7 +2650,7 @@ function settingsToXML() {
         xml += "</" + inner_sc + ">";
       });
     }
-    xml += "</" + sc + "></row>\\n";
+    xml += "</" + tag + "></row>\\n";
   });
   xml += "</Settings>";
   return xml;

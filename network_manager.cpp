@@ -236,10 +236,10 @@ void mqtt_manager_connect(void)
     Serial.print("...");
 
     bool ok;
-    if (settings_mqtt.Username && settings_mqtt.Username[0]) {
-        const char *user = settings_mqtt.Username;
-        const char *pw   = (settings_mqtt.Password && settings_mqtt.Password[0])
-                           ? settings_mqtt.Password : nullptr;
+    if (settings_mqtt.Mqtt_Username && settings_mqtt.Mqtt_Username[0]) {
+        const char *user = settings_mqtt.Mqtt_Username;
+        const char *pw   = (settings_mqtt.Mqtt_Password && settings_mqtt.Mqtt_Password[0])
+                           ? settings_mqtt.Mqtt_Password : nullptr;
         ok = mqtt.connect(MQTT_CLIENT_ID, user, pw);
     } else {
         ok = mqtt.connect(MQTT_CLIENT_ID);
