@@ -168,6 +168,18 @@ th {
   background: #eee;
 }
 
+.row-actions-left {
+  position: sticky;
+  left: 0;
+  background: #fff;
+  white-space: nowrap;
+  border-right: 2px solid #bbb;
+}
+
+th.row-actions-left {
+  background: #eee;
+}
+
 .row-actions {
   position: sticky;
   right: 0;
@@ -190,7 +202,12 @@ th.row-actions {
   color: #0066cc;
   cursor: pointer;
   font-weight: bold;
-  margin-right: 6px;
+}
+
+.edit-row {
+  color: #cc6600;
+  cursor: pointer;
+  font-weight: bold;
 }
 
 /* ===== BUTTON ===== */
@@ -233,6 +250,29 @@ button {
   font-size: 11px;
   white-space: nowrap;
   align-self: flex-end;
+}
+
+.settings-btn-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  justify-content: center;
+  margin: 8px auto;
+}
+
+.settings-btn-row button {
+  display: inline-block;
+  margin: 0;
+}
+
+.settings-rewind-btn {
+  padding: 0;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  aspect-ratio: 1;
+  line-height: 1;
 }
 
 .settings-checkbox {
@@ -321,13 +361,13 @@ button {
           <span class="error-msg"></span>
         </div>
         <div class="field">
-          <label>Class Pool Size</label>
-          <input placeholder="integer" data-type="integer" data-name="Class_Pool_Size" oninput="validateField(this); settingsChanged()">
+          <label>Class Pool Size (max 64)</label>
+          <input placeholder="integer" data-type="integer" data-name="Class_Pool_Size" max="64" oninput="validateField(this); settingsChanged()">
           <span class="error-msg"></span>
         </div>
         <div class="field">
-          <label>Var Pool Size</label>
-          <input placeholder="integer" data-type="integer" data-name="Var_Pool_Size" oninput="validateField(this); settingsChanged()">
+          <label>Var Pool Size (max 256)</label>
+          <input placeholder="integer" data-type="integer" data-name="Var_Pool_Size" max="256" oninput="validateField(this); settingsChanged()">
           <span class="error-msg"></span>
         </div>
       </div>
@@ -387,7 +427,10 @@ button {
         </div>
       </div>
     </div>
-    <button id="settings-save-btn" onclick="saveSettings()" class="insert-btn" disabled>Save</button>
+    <div class="settings-btn-row">
+      <button id="settings-save-btn" onclick="saveSettings()" class="insert-btn settings-save-btn" disabled>Save</button>
+      <button id="settings-rewind-btn" onclick="rewindSettings()" class="settings-rewind-btn" disabled title="Undo all changes">&#x21BA;</button>
+    </div>
   </div>
 </div>
 
@@ -424,6 +467,7 @@ button {
   <div class="table-wrap">
     <table>
     <thead><tr>
+      <th class="row-actions-left"></th>
       <th>Class</th>
       <th>Key</th>
       <th>Message</th>
@@ -525,6 +569,7 @@ button {
   <div class="table-wrap">
     <table>
     <thead><tr>
+      <th class="row-actions-left"></th>
       <th>Class</th>
       <th>Name</th>
       <th>Type</th>
@@ -586,6 +631,9 @@ var Settings_TABLE_COLS = ["SSID", "Password", "Class_Pool_Size", "Var_Pool_Size
 var PRELOAD_XML = {
 
 };
+
+/* ======== PRELOADED SETTINGS (embedded at build time, PC only) ======== */
+var PRELOAD_SETTINGS = "";
 
 /* ======== STABLE JS LOGIC (INJECTED FROM CODEGEN) ======== */
 /* ======== STABLE JS LOGIC ======== */
@@ -730,10 +778,12 @@ function renderTable(table, schema) {
   }
 
   state[table].forEach((r, i) => {
-    let tr = "<tr>";
+    let tr = `<tr><td class="row-actions-left">` +
+             `<span class="copy-row" onclick="copyRow('${table}',${i})" title="Copy to form">&#x2398;</span>` +
+             `</td>`;
     r.forEach(v => { tr += `<td>${v ?? ""}</td>`; });
     tr += `<td class="row-actions">` +
-          `<span class="copy-row" onclick="copyRow('${table}',${i})" title="Copy to form">&#x2398;</span>` +
+          `<span class="edit-row" onclick="editRow('${table}',${i})" title="Edit (copy &amp; delete)">&#x270F;</span>` +
           `<span class="delete" onclick="deleteRow('${table}',${i})" title="Delete">&#x2715;</span>` +
           `</td></tr>`;
     body.innerHTML += tr;
@@ -780,6 +830,13 @@ function deleteRow(table, i) {
   if (!state[table]) return;
   state[table].splice(i, 1);
   renderTable(table, window[table + "_SCHEMA"]);
+}
+
+
+/* ---------- EDIT ROW (copy to form + delete row) ---------- */
+function editRow(table, i) {
+  copyRow(table, i);
+  deleteRow(table, i);
 }
 
 
@@ -985,9 +1042,27 @@ function downloadZIP() {
 
 /* ---------- UPDATE SETTINGS TABLE ---------- */
 /* ---------- SETTINGS CHANGED ---------- */
+var _settingsOriginal = {};   /* snapshot taken when settings are loaded / saved */
+
 function settingsChanged() {
-  var btn = document.getElementById("settings-save-btn");
-  if (btn) btn.disabled = false;
+  var save   = document.getElementById("settings-save-btn");
+  var rewind = document.getElementById("settings-rewind-btn");
+  if (save)   save.disabled   = false;
+  if (rewind) rewind.disabled = false;
+}
+
+/* ---------- REWIND SETTINGS ---------- */
+function rewindSettings() {
+  document.querySelectorAll(".settings-bar input[data-name]").forEach(function(inp) {
+    var orig = _settingsOriginal[inp.dataset.name];
+    if (orig === undefined) return;
+    if (inp.type === "checkbox") inp.checked = (orig === "true");
+    else inp.value = orig;
+  });
+  var save   = document.getElementById("settings-save-btn");
+  var rewind = document.getElementById("settings-rewind-btn");
+  if (save)   save.disabled   = true;
+  if (rewind) rewind.disabled = true;
 }
 
 
@@ -1016,8 +1091,12 @@ async function saveSettings() {
     }
   }
   alert("Updates have been saved successfully");
-  var btn = document.getElementById("settings-save-btn");
-  if (btn) btn.disabled = true;
+  /* snapshot the saved state as the new baseline for Rewind */
+  _settingsOriginal = Object.assign({}, state["Settings"]);
+  var save   = document.getElementById("settings-save-btn");
+  var rewind = document.getElementById("settings-rewind-btn");
+  if (save)   save.disabled   = true;
+  if (rewind) rewind.disabled = true;
 }
 
 
@@ -1050,43 +1129,53 @@ function settingsToXML() {
 }
 
 
-/* ---------- LOAD SETTINGS (ESP only — populate inputs + state from /Settings.xml) ---------- */
+/* ---------- LOAD SETTINGS — populate inputs + state from Settings XML ---------- */
 /* Uses simple indexOf-based tag extraction (mirrors C++ extract_tag) instead of
- * DOMParser so it never silently fails on slightly malformed XML. */
+ * DOMParser so it never silently fails on slightly malformed XML.
+ * PC (file://): uses PRELOAD_SETTINGS embedded at build time.
+ * ESP: fetches /Settings.xml from the device. */
 function loadSettings() {
-  if (location.hostname === "") return;
+  /* Extract the text content between <Tag>…</Tag>. Returns null if absent. */
+  function extractTag(str, tag) {
+    var open  = "<" + tag + ">";
+    var close = "</" + tag + ">";
+    var s = str.indexOf(open);
+    if (s === -1) return null;
+    s += open.length;
+    var e = str.indexOf(close, s);
+    if (e === -1) return null;
+    return str.substring(s, e).trim();
+  }
+
+  function applyXml(xml) {
+    if (!xml) return;
+    state["Settings"] = {};
+    Settings_TABLE_COLS.forEach(function(field) {
+      var val = extractTag(xml, field);
+      if (val === null) return;
+      state["Settings"][field] = val;
+      var inp = document.querySelector(".settings-bar input[data-name='" + field + "']");
+      if (!inp) return;
+      if (inp.type === "checkbox") inp.checked = (val === "true");
+      else inp.value = val;
+    });
+    /* snapshot loaded values as baseline for Rewind */
+    _settingsOriginal = Object.assign({}, state["Settings"]);
+    var save   = document.getElementById("settings-save-btn");
+    var rewind = document.getElementById("settings-rewind-btn");
+    if (save)   save.disabled   = true;
+    if (rewind) rewind.disabled = true;
+  }
+
+  /* PC mode: use build-time-embedded content (fetch blocked by CORS on file://) */
+  if (location.hostname === "" && PRELOAD_SETTINGS) {
+    applyXml(PRELOAD_SETTINGS);
+    return;
+  }
+
   fetch("/Settings.xml", { cache: "no-store" })
     .then(function(r) { if (r.ok) return r.text(); })
-    .then(function(xml) {
-      if (!xml) return;
-      state["Settings"] = {};
-
-      /* Extract the text content between <Tag>…</Tag>. Returns null if absent. */
-      function extractTag(str, tag) {
-        var open  = "<" + tag + ">";
-        var close = "</" + tag + ">";
-        var s = str.indexOf(open);
-        if (s === -1) return null;
-        s += open.length;
-        var e = str.indexOf(close, s);
-        if (e === -1) return null;
-        return str.substring(s, e).trim();
-      }
-
-      Settings_TABLE_COLS.forEach(function(field) {
-        var val = extractTag(xml, field);
-        if (val === null) return;
-        state["Settings"][field] = val;
-        var inp = document.querySelector(".settings-bar input[data-name='" + field + "']");
-        if (!inp) return;
-        if (inp.type === "checkbox") inp.checked = (val === "true");
-        else inp.value = val;
-      });
-    })
-    .then(function() {
-      var btn = document.getElementById("settings-save-btn");
-      if (btn) btn.disabled = true;
-    })
+    .then(applyXml)
     .catch(function(e) { console.error("[ACMS] loadSettings failed:", e); });
 }
 
@@ -1216,6 +1305,13 @@ function validateField(input) {
     case "integer":
       if (!/^-?\d+$/.test(v)) msg = "Must be a whole number";
       break;
+  }
+
+  /* max-value check (pool-size fields carry a max= attribute) */
+  if (!msg && input.hasAttribute('max')) {
+    const maxVal = parseInt(input.getAttribute('max'), 10);
+    const numVal = parseInt(v, 10);
+    if (!isNaN(numVal) && numVal > maxVal) msg = 'Must be ≤ ' + maxVal;
   }
 
   if (msg) {

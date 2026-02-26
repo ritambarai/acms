@@ -8,14 +8,14 @@
  *  CONFIG (powers of two)
  * ============================================================ */
 
-/* Compile-time upper bounds — used only for static array sizing */
-#define MAX_CLASS_CAP   32
-#define MAX_VAR_CAP     (2 * 128)
+/* Compile-time pool capacity — single source of truth for all array sizing */
+#define MAX_CLASS_POOL_CAP  64
+#define MAX_VAR_POOL_CAP    256
 
-/* Hashmap table sizes derived from compile-time caps */
-#define CLASS_MAP_SIZE  (2 * (MAX_CLASS_CAP - 1))
-#define VAR_MAP_SIZE    (2 * MAX_VAR_CAP)
-#define ADDR_MAP_SIZE   (2 * MAX_VAR_CAP)
+/* Hashmap table sizes: 2× the pool caps (open-addressing load factor) */
+#define CLASS_MAP_SIZE  (2 * MAX_CLASS_POOL_CAP)
+#define VAR_MAP_SIZE    (2 * MAX_VAR_POOL_CAP)
+#define ADDR_MAP_SIZE   (2 * MAX_VAR_POOL_CAP)
 
 /* Runtime-effective pool sizes — wired to settings_schema via data_manager.c */
 #ifdef __cplusplus
