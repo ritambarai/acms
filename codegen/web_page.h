@@ -1423,7 +1423,7 @@ function validateValidityField(input) {
       return k.toLowerCase() === v.toLowerCase();
     });
     if (!nameKey) {
-      _typeFieldSet(input, true);
+      _typeFieldSet(input, true, ["type"]);
       input.style.borderColor = "red";
       input.classList.add("invalid");
       errSpan.textContent = "NO MATCH";
