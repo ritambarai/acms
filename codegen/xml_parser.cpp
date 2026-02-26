@@ -21,7 +21,7 @@ variables_modbus_table_t variables_modbus_table = { .count = 0, .version = 0 };
 variables_constraints_table_t variables_constraints_table = { .count = 0, .version = 0 };
 settings_general_t settings_general = { NULL, NULL, 0, 0 };
 settings_mqtt_t settings_mqtt = { NULL, 0, NULL, NULL, NULL, NULL };
-settings_json_t settings_json = { false, false, false };
+settings_json includes_t settings_json includes = { false, false, false };
 
 /* ── extract value between <tag>…</tag> or detect <tag/> ── */
 static bool extract_tag(const char *xml, const char *tag, char *buf, int buflen) {
@@ -425,19 +425,19 @@ static void parse_settings_xml(const char *xml) {
       extract_tag(row_start, "Username", buf, sizeof(buf));
       if (settings_mqtt.Username) { free(settings_mqtt.Username); settings_mqtt.Username = NULL; }
       if (buf[0]) settings_mqtt.Username = strdup(buf);
-      extract_tag(row_start, "Mqtt_Password", buf, sizeof(buf));
-      if (settings_mqtt.Mqtt_Password) { free(settings_mqtt.Mqtt_Password); settings_mqtt.Mqtt_Password = NULL; }
-      if (buf[0]) settings_mqtt.Mqtt_Password = strdup(buf);
+      extract_tag(row_start, "Password", buf, sizeof(buf));
+      if (settings_mqtt.Password) { free(settings_mqtt.Password); settings_mqtt.Password = NULL; }
+      if (buf[0]) settings_mqtt.Password = strdup(buf);
     }
 
-    /* ── json ── */
-    else if (strstr(row_start, "<json>")) {
+    /* ── json includes ── */
+    else if (strstr(row_start, "<json_includes>")) {
       extract_tag(row_start, "Metadata", buf, sizeof(buf));
-      settings_json.Metadata = (strcmp(buf, "true") == 0);
+      settings_json_includes.Metadata = (strcmp(buf, "true") == 0);
       extract_tag(row_start, "Constraints", buf, sizeof(buf));
-      settings_json.Constraints = (strcmp(buf, "true") == 0);
-      extract_tag(row_start, "Modbus", buf, sizeof(buf));
-      settings_json.Modbus = (strcmp(buf, "true") == 0);
+      settings_json_includes.Constraints = (strcmp(buf, "true") == 0);
+      extract_tag(row_start, "Type_Unit", buf, sizeof(buf));
+      settings_json_includes.Type_Unit = (strcmp(buf, "true") == 0);
     }
 
     pos = row_end + 6;
