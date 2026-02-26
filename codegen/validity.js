@@ -221,6 +221,7 @@ function validateValidityField(input) {
       return k.toLowerCase() === classVal.toLowerCase();
     });
     if (!classKey) {
+      _typeFieldSet(input, true);
       input.style.borderColor = "red";
       input.classList.add("invalid");
       errSpan.textContent = "NO MATCH";
