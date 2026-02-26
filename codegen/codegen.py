@@ -336,7 +336,7 @@ def gen_table_blocks(tables, validity_field_names=None, subcategories=None, hidd
 """
         for n, _ in fields:
             html += f"      <th>{n}</th>\n"
-        html += f"""      <th>X</th>
+        html += f"""      <th class="row-actions"></th>
     </tr></thead>
     <tbody id="{t}_body"></tbody>
   </table>
@@ -1778,10 +1778,10 @@ def gen_settings_block(name, subcats, fields):
                     html += f'              <label>{label}</label>\n'
                     if typ == "boolean":
                         html += (f'              <input type="checkbox" data-type="{typ}"'
-                                 f' data-name="{fn}" class="settings-checkbox">\n')
+                                 f' data-name="{fn}" class="settings-checkbox" onchange="settingsChanged()">\n')
                     else:
                         html += (f'              <input placeholder="{typ}" data-type="{typ}"'
-                                 f' data-name="{fn}" oninput="validateField(this)">\n')
+                                 f' data-name="{fn}" oninput="validateField(this); settingsChanged()">\n')
                     html += f'              <span class="error-msg"></span>\n'
                     html += f'            </div>\n'
                 html += f'          </div>\n'
@@ -1796,36 +1796,16 @@ def gen_settings_block(name, subcats, fields):
                 html += f'          <label>{label}</label>\n'
                 if typ == "boolean":
                     html += (f'          <input type="checkbox" data-type="{typ}"'
-                             f' data-name="{fn}" class="settings-checkbox">\n')
+                             f' data-name="{fn}" class="settings-checkbox" onchange="settingsChanged()">\n')
                 else:
                     html += (f'          <input placeholder="{typ}" data-type="{typ}"'
-                             f' data-name="{fn}" oninput="validateField(this)">\n')
+                             f' data-name="{fn}" oninput="validateField(this); settingsChanged()">\n')
                 html += f'          <span class="error-msg"></span>\n'
                 html += f'        </div>\n'
             html += f'      </div>\n'
         html += f'    </div>\n'
-    # Single Save button at the bottom of all subcategory rows
-    html += f'    <button onclick="saveSettings()" class="insert-btn">Save</button>\n'
-
-    # Settings table — 2 fixed rows showing current values
-    table_cols = []
-    for sc_val in other_subcats.values():
-        if isinstance(sc_val, dict):
-            for inner_fields in sc_val.values():
-                table_cols.extend(inner_fields)
-        else:
-            table_cols.extend(sc_val)
-
-    html += f'    <div class="table-wrap">\n'
-    html += f'      <table>\n'
-    html += f'      <thead><tr>\n'
-    html += f'        <th>Category</th>\n'
-    for col in table_cols:
-        html += f'        <th>{col}</th>\n'
-    html += f'      </tr></thead>\n'
-    html += f'      <tbody id="Settings_body"></tbody>\n'
-    html += f'      </table>\n'
-    html += f'    </div>\n'
+    # Single Save button at the bottom of all subcategory rows (disabled until a field changes)
+    html += f'    <button id="settings-save-btn" onclick="saveSettings()" class="insert-btn" disabled>Save</button>\n'
 
     html += f'  </div>\n'
 
@@ -1989,7 +1969,10 @@ function renderTable(table, schema) {
   state[table].forEach((r, i) => {
     let tr = "<tr>";
     r.forEach(v => { tr += `<td>${v ?? ""}</td>`; });
-    tr += `<td class="delete" onclick="deleteRow('${table}',${i})">X</td></tr>`;
+    tr += `<td class="row-actions">` +
+          `<span class="copy-row" onclick="copyRow('${table}',${i})" title="Copy to form">&#x2398;</span>` +
+          `<span class="delete" onclick="deleteRow('${table}',${i})" title="Delete">&#x2715;</span>` +
+          `</td></tr>`;
     body.innerHTML += tr;
   });
 
@@ -2034,6 +2017,21 @@ function deleteRow(table, i) {
   if (!state[table]) return;
   state[table].splice(i, 1);
   renderTable(table, window[table + "_SCHEMA"]);
+}
+
+
+/* ---------- COPY ROW TO FORM ---------- */
+function copyRow(table, i) {
+  const schema = window[table + "_SCHEMA"];
+  const row = state[table][i];
+  const form = document.getElementById(table + "_form");
+  if (!form || !row) return;
+  schema.forEach((f, idx) => {
+    const el = form.querySelector(`[data-name="${f.name}"]`);
+    if (!el) return;
+    el.value = row[idx] ?? "";
+    el.dispatchEvent(new Event(el.tagName === "SELECT" ? "change" : "input", { bubbles: true }));
+  });
 }
 
 
@@ -2223,31 +2221,10 @@ function downloadZIP() {
 
 
 /* ---------- UPDATE SETTINGS TABLE ---------- */
-function updateSettingsTable() {
-  var tbody = document.getElementById("Settings_body");
-  if (!tbody) return;
-  tbody.innerHTML = "";
-  Object.keys(Settings_SUBCATS).forEach(function(cat) {
-    var cat_val = Settings_SUBCATS[cat];
-    var tr = document.createElement("tr");
-    var catTd = document.createElement("td");
-    catTd.textContent = cat;
-    tr.appendChild(catTd);
-    Settings_TABLE_COLS.forEach(function(col) {
-      var td = document.createElement("td");
-      var belongs = false;
-      if (Array.isArray(cat_val)) {
-        belongs = cat_val.indexOf(col) !== -1;
-      } else {
-        Object.keys(cat_val).forEach(function(inner) {
-          if (cat_val[inner].indexOf(col) !== -1) belongs = true;
-        });
-      }
-      td.textContent = belongs ? (state["Settings"][col] !== undefined ? state["Settings"][col] : "") : "\u2014";
-      tr.appendChild(td);
-    });
-    tbody.appendChild(tr);
-  });
+/* ---------- SETTINGS CHANGED ---------- */
+function settingsChanged() {
+  var btn = document.getElementById("settings-save-btn");
+  if (btn) btn.disabled = false;
 }
 
 
@@ -2262,7 +2239,6 @@ async function saveSettings() {
   console.group("[ACMS] Settings state");
   console.table(state["Settings"]);
   console.groupEnd();
-  updateSettingsTable();
   if (location.hostname !== "") {
     try {
       const r = await fetch("/Settings.xml", {
@@ -2277,6 +2253,8 @@ async function saveSettings() {
     }
   }
   alert("Updates have been saved successfully");
+  var btn = document.getElementById("settings-save-btn");
+  if (btn) btn.disabled = true;
 }
 
 
@@ -2342,7 +2320,10 @@ function loadSettings() {
         else inp.value = val;
       });
     })
-    .then(function() { updateSettingsTable(); })
+    .then(function() {
+      var btn = document.getElementById("settings-save-btn");
+      if (btn) btn.disabled = true;
+    })
     .catch(function(e) { console.error("[ACMS] loadSettings failed:", e); });
 }
 

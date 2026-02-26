@@ -139,6 +139,7 @@ body {
 .table-wrap {
   flex: 1;
   overflow-y: auto;
+  overflow-x: auto;
   margin-top: 10px;
 }
 
@@ -157,10 +158,29 @@ th {
   background: #eee;
 }
 
+.row-actions {
+  position: sticky;
+  right: 0;
+  background: #fff;
+  white-space: nowrap;
+  border-left: 2px solid #bbb;
+}
+
+th.row-actions {
+  background: #eee;
+}
+
 .delete {
   color: red;
   cursor: pointer;
   font-weight: bold;
+}
+
+.copy-row {
+  color: #0066cc;
+  cursor: pointer;
+  font-weight: bold;
+  margin-right: 6px;
 }
 
 /* ===== BUTTON ===== */
