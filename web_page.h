@@ -43,7 +43,8 @@ body {
   text-align: center;
 }
 
-.field input {
+.field input,
+.field select {
   width: 100%;
   padding: 6px;
   box-sizing: border-box;
@@ -396,6 +397,11 @@ button {
   <div id="Metadata_form">
   <div class="form-grid">
     <div class="field">
+      <label>Class</label>
+      <input placeholder="string" data-type="string" data-name="Class" oninput="validateField(this); var ni=document.getElementById('Metadata_form').querySelector('[data-field=Name]'); if(ni) validateValidityField(ni)">
+      <span class="error-msg"></span>
+    </div>
+    <div class="field">
       <label>Key</label>
       <input placeholder="float" data-type="float" data-name="Key" oninput="validateField(this)">
       <span class="error-msg"></span>
@@ -405,11 +411,6 @@ button {
       <input placeholder="string" data-type="string" data-name="Message" oninput="validateField(this)">
       <span class="error-msg"></span>
     </div>
-    <div class="field">
-      <label>Class</label>
-      <input placeholder="string" data-type="string" data-name="Class" oninput="validateField(this); var ni=document.getElementById('Metadata_form').querySelector('[data-field=Name]'); if(ni) validateValidityField(ni)">
-      <span class="error-msg"></span>
-    </div>
   </div>
 
   </div>
@@ -417,9 +418,9 @@ button {
   <div class="table-wrap">
     <table>
     <thead><tr>
+      <th>Class</th>
       <th>Key</th>
       <th>Message</th>
-      <th>Class</th>
       <th>X</th>
     </tr></thead>
     <tbody id="Metadata_body"></tbody>
@@ -447,7 +448,7 @@ button {
     </div>
     <div class="field">
       <label>Name</label>
-      <input placeholder="string" data-type="string" data-name="Name" data-field="Name" onblur="alertIfInvalid(this)" oninput="validateValidityField(this)">
+      <input placeholder="string" data-type="string" data-name="Name" data-field="Name" oninput="validateValidityField(this)">
       <span class="error-msg"></span>
     </div>
     <div class="field">
@@ -545,9 +546,9 @@ button {
 
 /* ======== SCHEMA (INJECTED FROM XSD) ======== */
 var Metadata_SCHEMA = [
+  { name:"Class", type:"string" },
   { name:"Key", type:"float" },
-  { name:"Message", type:"string" },
-  { name:"Class", type:"string" }
+  { name:"Message", type:"string" }
 ];
 
 var Variables_SCHEMA = [
@@ -638,25 +639,50 @@ function insertRow(table, schema) {
 
   if (!state[table]) state[table] = [];
 
-  const inputs = document.querySelectorAll(`#${table}_form input`);
+  const inputs = document.querySelectorAll(`#${table}_form input, #${table}_form select`);
 
-  /* validate all fields (no alerts — alertIfInvalid is only wired to onblur) */
+  /* validate all fields; alert on Name field errors at insert time */
   let valid = true;
   inputs.forEach(inp => {
     const fn = inp.dataset.field ? validateValidityField : validateField;
     if (!fn(inp)) valid = false;
   });
-  if (!valid) return;
+  if (!valid) {
+    const nameInp = document.querySelector(`#${table}_form [data-field="Name"]`);
+    if (nameInp) { nameInp.dataset.lastAlert = ""; alertIfInvalid(nameInp); }
+    return;
+  }
 
   const row = [];
   for (let i = 0; i < inputs.length; i++) {
-    const v = inputs[i].value.trim();
+    const el = inputs[i];
+    const v = el.value.trim();
     row.push(v === "" ? null : v);
-    inputs[i].value = "";
-    inputs[i].style.borderColor = "";
-    inputs[i].classList.remove("invalid");
-    inputs[i].nextElementSibling.textContent = "";
-    inputs[i].nextElementSibling.style.color = "";
+    /* revert any Type select back to an input before clearing */
+    if (el.tagName === "SELECT") {
+      const savedType  = el.dataset.type  || "string";
+      const savedField = el.dataset.field || "";
+      const fId = table + "_form";
+      const inp2 = document.createElement("input");
+      inp2.dataset.name = "Type";
+      inp2.dataset.type = savedType;
+      inp2.placeholder = savedType;
+      if (savedField) inp2.dataset.field = savedField;
+      inp2.oninput = function() {
+        validateField(this);
+        var ni = document.getElementById(fId).querySelector('[data-field="Name"]');
+        if (ni) validateValidityField(ni);
+      };
+      el.parentElement.replaceChild(inp2, el);
+      inp2.nextElementSibling.textContent = "";
+      inp2.nextElementSibling.style.color = "";
+      continue;
+    }
+    el.value = "";
+    el.style.borderColor = "";
+    el.classList.remove("invalid");
+    el.nextElementSibling.textContent = "";
+    el.nextElementSibling.style.color = "";
   }
 
   if (row.every(v => v === null)) return;
@@ -671,6 +697,31 @@ function renderTable(table, schema) {
 
   const body = document.getElementById(table + "_body");
   body.innerHTML = "";
+
+  const TYPE_PINNED = ["type", "unit"];
+  function _typeRank(v) {
+    const i = TYPE_PINNED.indexOf(String(v ?? "").toLowerCase());
+    return i >= 0 ? i : TYPE_PINNED.length;
+  }
+  function _cmp(va, vb) {
+    const na = parseFloat(va), nb = parseFloat(vb);
+    return (!isNaN(na) && !isNaN(nb)) ? na - nb : String(va).localeCompare(String(vb));
+  }
+  if (table === "Metadata") {
+    const ci = schema.findIndex(f => f.name === "Class");
+    const ki = schema.findIndex(f => f.name === "Key");
+    state[table].sort((a, b) =>
+      _cmp(a[ci] ?? "", b[ci] ?? "") || _cmp(a[ki] ?? "", b[ki] ?? ""));
+  } else if (table === "Variables") {
+    const ci = schema.findIndex(f => f.name === "Class");
+    const ni = schema.findIndex(f => f.name === "Name");
+    const ti = schema.findIndex(f => f.name === "Type");
+    state[table].sort((a, b) =>
+      _cmp(a[ci] ?? "", b[ci] ?? "") ||
+      _cmp(a[ni] ?? "", b[ni] ?? "") ||
+      (_typeRank(a[ti]) - _typeRank(b[ti])) ||
+      _cmp(a[ti] ?? "", b[ti] ?? ""));
+  }
 
   state[table].forEach((r, i) => {
     let tr = "<tr>";
@@ -1113,8 +1164,25 @@ async function submitAll() {
 }
 
 
+/* ---------- ENTER KEY → INSERT / SAVE ---------- */
+/* Pressing Enter in any text input fires the nearest enabled Insert/Save button. */
+document.addEventListener("keydown", function(e) {
+  if (e.key !== "Enter") return;
+  var input = e.target;
+  if (input.tagName !== "INPUT" || input.type === "checkbox") return;
+  var container = input.closest(".half") || input.closest(".settings-bar");
+  if (!container) return;
+  var btn = container.querySelector(".insert-btn");
+  if (btn && !btn.disabled) btn.click();
+});
+
+
 
 /* ======== FIELD VALIDATOR + VALIDITY CHECKER (INJECTED FROM CODEGEN) ======== */
+/* ---------- INSERT BUTTON STATE HELPER ---------- */
+/* Insert button stays enabled; validation + alertIfInvalid run at insert time. */
+function updateInsertBtn(input) {}
+
 /* ---------- FIELD VALIDATOR (generated from XSD) ---------- */
 /* Types found: boolean, float, integer, string */
 function validateField(input) {
@@ -1125,6 +1193,7 @@ function validateField(input) {
   if (v === "") {
     input.classList.remove("invalid");
     errSpan.textContent = "";
+    updateInsertBtn(input);
     return true;
   }
 
@@ -1145,11 +1214,13 @@ function validateField(input) {
   if (msg) {
     input.classList.add("invalid");
     errSpan.textContent = msg;
+    updateInsertBtn(input);
     return false;
   }
 
   input.classList.remove("invalid");
   errSpan.textContent = "";
+  updateInsertBtn(input);
   return true;
 }
 
@@ -1212,15 +1283,67 @@ function buildVariableDict() {
   return dict;
 }
 
+/* ── Type field: toggle between text input and type/unit dropdown ── */
+function _typeFieldSet(nameInput, asDropdown, opts) {
+  opts = opts || ["type", "unit"];
+  var form = nameInput.closest('[id$="_form"]');
+  if (!form) return;
+  var typeEl = form.querySelector('[data-name="Type"]');
+  if (!typeEl) return;
+  var isSelect = typeEl.tagName === "SELECT";
+  if (asDropdown && isSelect) {
+    var curOpts = (typeEl.dataset.opts || "").split(",").sort().join(",");
+    var newOpts = opts.slice().sort().join(",");
+    if (curOpts === newOpts) return;
+  }
+  if (!asDropdown && !isSelect) return;
+  var parent = typeEl.parentElement;
+  var formId = form.id;
+  var savedField = typeEl.dataset.field || "";
+  var savedType  = typeEl.dataset.type  || "string";
+  if (asDropdown) {
+    var sel = document.createElement("select");
+    sel.dataset.name = "Type";
+    sel.dataset.type = savedType;
+    sel.dataset.opts = opts.slice().sort().join(",");
+    var emptyOpt = document.createElement("option");
+    emptyOpt.value = ""; emptyOpt.textContent = "";
+    sel.appendChild(emptyOpt);
+    opts.forEach(function(opt) {
+      var o = document.createElement("option");
+      o.value = opt; o.textContent = opt;
+      sel.appendChild(o);
+    });
+    sel.onchange = function() {
+      validateField(this);
+      var vi = document.getElementById(formId).querySelector('[data-field="Value"]');
+      if (vi) validateValidityField(vi);
+      var ni = document.getElementById(formId).querySelector('[data-field="Name"]');
+      if (ni) validateValidityField(ni);
+    };
+    parent.replaceChild(sel, typeEl);
+  } else {
+    var inp = document.createElement("input");
+    inp.dataset.name = "Type";
+    inp.dataset.type = savedType;
+    inp.placeholder = savedType;
+    if (savedField) inp.dataset.field = savedField;
+    inp.oninput = function() {
+      validateField(this);
+      var vi = document.getElementById(formId).querySelector('[data-field="Value"]');
+      if (vi) validateValidityField(vi);
+      var ni = document.getElementById(formId).querySelector('[data-field="Name"]');
+      if (ni) validateValidityField(ni);
+    };
+    parent.replaceChild(inp, typeEl);
+  }
+}
+
 /* Show alert once per error reason — only called from onblur, never from insertRow */
 function alertIfInvalid(input) {
   var errSpan = input.nextElementSibling;
   var msg = errSpan ? errSpan.textContent : "";
-  if (msg === "NO MATCH" || msg === "NO TYPE" || msg === "NO UNIT") {
-    var half = input.closest(".half");
-    var btn = half ? half.querySelector(".insert-btn") : null;
-    if (btn) btn.disabled = true;
-  }
+  updateInsertBtn(input);
   if (msg === "NO MATCH" && input.dataset.lastAlert !== "nomatch") {
     input.dataset.lastAlert = "nomatch";
     alert("Must Insert Variable Type And Unit First");
@@ -1241,15 +1364,14 @@ function validateValidityField(input) {
 
   if (v === "") {
     if (fieldName === "Name") {
-      var _h = input.closest(".half");
-      var _b = _h ? _h.querySelector(".insert-btn") : null;
-      if (_b) _b.disabled = false;
       input.dataset.lastAlert = "";
+      _typeFieldSet(input, false);
     }
     input.style.borderColor = "";
     input.classList.remove("invalid");
     errSpan.textContent = "";
     errSpan.style.color = "";
+    updateInsertBtn(input);
     return true;
   }
 
@@ -1268,6 +1390,7 @@ function validateValidityField(input) {
       errSpan.textContent = "";
       errSpan.style.color = "";
       input.dataset.lastAlert = "";
+      updateInsertBtn(input);
       return true;
     }
     var classInput = form ? form.querySelector('[data-name="Class"]') : null;
@@ -1283,8 +1406,8 @@ function validateValidityField(input) {
       input.classList.add("invalid");
       errSpan.textContent = "NO MATCH";
       errSpan.style.color = "red";
-      if (insertBtn) insertBtn.disabled = true;
       input.dataset.lastAlert = "";
+      updateInsertBtn(input);
       return false;
     }
 
@@ -1293,12 +1416,13 @@ function validateValidityField(input) {
       return k.toLowerCase() === v.toLowerCase();
     });
     if (!nameKey) {
+      _typeFieldSet(input, true);
       input.style.borderColor = "red";
       input.classList.add("invalid");
       errSpan.textContent = "NO MATCH";
       errSpan.style.color = "red";
-      if (insertBtn) insertBtn.disabled = true;
       input.dataset.lastAlert = "";
+      updateInsertBtn(input);
       return false;
     }
 
@@ -1309,11 +1433,12 @@ function validateValidityField(input) {
       return k.toLowerCase() === "type";
     });
     if (!typeRowKey) {
+      _typeFieldSet(input, true);
       input.style.borderColor = "red";
       input.classList.add("invalid");
       errSpan.textContent = "NO TYPE";
       errSpan.style.color = "red";
-      if (insertBtn) insertBtn.disabled = true;
+      updateInsertBtn(input);
       return false;
     }
 
@@ -1335,7 +1460,8 @@ function validateValidityField(input) {
 
     /* ── Step 4: bool/choice → name already validated in Step 1 ── */
     if (typeLabel === "bool" || typeLabel === "choice") {
-      if (insertBtn) insertBtn.disabled = false;
+      _typeFieldSet(input, false);
+      updateInsertBtn(input);
       return true;
     }
 
@@ -1344,11 +1470,12 @@ function validateValidityField(input) {
       return k.toLowerCase() === "unit";
     });
     if (!unitRowKey) {
+      _typeFieldSet(input, true, ["unit"]);
       input.style.borderColor = "red";
       input.classList.add("invalid");
       errSpan.textContent = "NO UNIT";
       errSpan.style.color = "red";
-      if (insertBtn) insertBtn.disabled = true;
+      updateInsertBtn(input);
       return false;
     }
 
@@ -1363,12 +1490,13 @@ function validateValidityField(input) {
     var uMsg = (uClassKey && dict[uClassKey].hasOwnProperty(uKeyNorm))
       ? dict[uClassKey][uKeyNorm] : null;
     if (uMsg !== null) {
+      _typeFieldSet(input, false);
       input.style.borderColor = "green";
       input.classList.remove("invalid");
       errSpan.textContent = uMsg.toUpperCase();
       errSpan.style.color = "green";
-      if (insertBtn) insertBtn.disabled = false;
       input.dataset.lastAlert = "";
+      updateInsertBtn(input);
       return true;
     }
     /* unit row present but key missing from Metadata */
@@ -1376,7 +1504,7 @@ function validateValidityField(input) {
     input.classList.add("invalid");
     errSpan.textContent = "NO UNIT";
     errSpan.style.color = "red";
-    if (insertBtn) insertBtn.disabled = true;
+    updateInsertBtn(input);
     return false;
   }
 
@@ -1401,6 +1529,7 @@ function validateValidityField(input) {
       input.classList.remove("invalid");
       errSpan.textContent = "";
       errSpan.style.color = "";
+      updateInsertBtn(input);
       return true;
     }
   }
@@ -1411,6 +1540,7 @@ function validateValidityField(input) {
     input.classList.add("invalid");
     errSpan.textContent = "NO MATCH";
     errSpan.style.color = "red";
+    updateInsertBtn(input);
     return false;
   }
 
@@ -1420,6 +1550,7 @@ function validateValidityField(input) {
     input.classList.add("invalid");
     errSpan.textContent = "MISMATCH";
     errSpan.style.color = "red";
+    updateInsertBtn(input);
     return false;
   }
 
@@ -1428,6 +1559,7 @@ function validateValidityField(input) {
   input.classList.remove("invalid");
   errSpan.textContent = dict[classKey][v].toUpperCase();
   errSpan.style.color = "green";
+  updateInsertBtn(input);
   return true;
 }
 
