@@ -152,18 +152,18 @@ void json_send(void)
     String payload;
     serializeJson(doc, payload);
 
-    //Serial.println("➡ Publishing JSON:");
-    //Serial.println(payload);
-    //Serial.print("Payload size: ");
-    //Serial.println(payload.length());
+    Serial.println("[MQTT] Publishing JSON:");
+    Serial.println(payload);
+    Serial.print("[MQTT] Payload size: ");
+    Serial.println(payload.length());
 
     bool ok = mqtt_manager_publish(settings_mqtt.Data_Topic, payload.c_str(), true);
 
-    //if (ok) {
-    //    Serial.println("✅ MQTT publish OK");
-    //} else {
-    //    Serial.println("❌ MQTT publish FAILED");
-    //}
+    if (ok) {
+        Serial.println("[MQTT] Publish OK");
+    } else {
+        Serial.println("[MQTT] Publish FAILED");
+    }
 }
 
 void json_send_http(void)

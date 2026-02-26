@@ -13,6 +13,7 @@ extern "C" {
 #include <stdlib.h>
 #include <math.h>
 #include "xml_defaults.h"
+#include "acms_web.h"
 
 metadata_table_t metadata_table = { .count = 0, .version = 0 };
 variables_description_table_t variables_description_table = { .count = 0, .version = 0 };
@@ -21,8 +22,6 @@ variables_modbus_table_t variables_modbus_table = { .count = 0, .version = 0 };
 settings_general_t settings_general = { NULL, NULL, 0, 0 };
 settings_mqtt_t settings_mqtt = { NULL, 0, NULL, NULL, NULL, NULL };
 settings_json_t settings_json = { false, false, false };
-uint16_t increment_loop_pool[MAX_VARIABLES_CONSTRAINTS_ROWS];
-uint16_t increment_loop_count = 0;
 
 /* ── extract value between <tag>…</tag> or detect <tag/> ── */
 static bool extract_tag(const char *xml, const char *tag, char *buf, int buflen) {
@@ -62,20 +61,25 @@ static int parse_metadata_xml(const char *xml, metadata_table_t *tbl) {
     if (!row_start) break;
     const char *row_end = strstr(row_start, "</row>");
     if (!row_end) break;
+    int row_len = row_end - row_start;
+    char row_buf[512];
+    if (row_len >= (int)sizeof(row_buf)) { pos = row_end + 6; continue; }
+    memcpy(row_buf, row_start, row_len);
+    row_buf[row_len] = '\0';
 
-    extract_tag(row_start, "Key", buf, sizeof(buf));
+    extract_tag(row_buf, "Key", buf, sizeof(buf));
     if (buf[0] && !validate_metadata_value(COL_METADATA_KEY_FLOAT, buf)) {
       pos = row_end + 6; continue;
     }
     tbl->rows[count].Key = buf[0] ? (float)atof(buf) : -9999.0f;
 
-    extract_tag(row_start, "Message", buf, sizeof(buf));
+    extract_tag(row_buf, "Message", buf, sizeof(buf));
     if (buf[0] && !validate_metadata_value(COL_METADATA_MESSAGE_STRING, buf)) {
       pos = row_end + 6; continue;
     }
     tbl->rows[count].Message = buf[0] ? strdup(buf) : NULL;
 
-    extract_tag(row_start, "Class", buf, sizeof(buf));
+    extract_tag(row_buf, "Class", buf, sizeof(buf));
     if (buf[0] && !validate_metadata_value(COL_METADATA_CLASS_STRING, buf)) {
       pos = row_end + 6; continue;
     }
@@ -138,27 +142,34 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
     if (!row_start) break;
     const char *row_end = strstr(row_start, "</row>");
     if (!row_end) break;
+    /* Scope searches to the current row — prevents self-closing tags in
+     * later rows from shadowing real values in the current row. */
+    int row_len = row_end - row_start;
+    char row_buf[1024];
+    if (row_len >= (int)sizeof(row_buf)) { pos = row_end + 6; continue; }
+    memcpy(row_buf, row_start, row_len);
+    row_buf[row_len] = '\0';
 
     /* ── description ── */
-    extract_tag(row_start, "Class", buf, sizeof(buf));
+    extract_tag(row_buf, "Class", buf, sizeof(buf));
     if (buf[0] && !validate_variables_description_value(COL_VARIABLES_DESCRIPTION_CLASS_STRING, buf)) {
       pos = row_end + 6; continue;
     }
     description_tbl->rows[description_count].Class = buf[0] ? strdup(buf) : NULL;
 
-    extract_tag(row_start, "Name", buf, sizeof(buf));
+    extract_tag(row_buf, "Name", buf, sizeof(buf));
     if (buf[0] && !validate_variables_description_value(COL_VARIABLES_DESCRIPTION_NAME_STRING, buf)) {
       pos = row_end + 6; continue;
     }
     description_tbl->rows[description_count].Name = buf[0] ? strdup(buf) : NULL;
 
-    extract_tag(row_start, "Type", buf, sizeof(buf));
+    extract_tag(row_buf, "Type", buf, sizeof(buf));
     if (buf[0] && !validate_variables_description_value(COL_VARIABLES_DESCRIPTION_TYPE_STRING, buf)) {
       pos = row_end + 6; continue;
     }
     description_tbl->rows[description_count].Type = buf[0] ? strdup(buf) : NULL;
 
-    extract_tag(row_start, "Value", buf, sizeof(buf));
+    extract_tag(row_buf, "Value", buf, sizeof(buf));
     if (buf[0] && !validate_variables_description_value(COL_VARIABLES_DESCRIPTION_VALUE_FLOAT, buf)) {
       pos = row_end + 6; continue;
     }
@@ -167,25 +178,25 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
     /* ── constraints: parse into temporaries, commit only if any field is non-default ── */
     float _t_Operation_ID, _t_Threshold, _t_Fault_Code, _t_Increment;
 
-    extract_tag(row_start, "Operation_ID", buf, sizeof(buf));
+    extract_tag(row_buf, "Operation_ID", buf, sizeof(buf));
     if (buf[0] && !validate_variables_constraints_value(COL_VARIABLES_CONSTRAINTS_OPERATION_ID_FLOAT, buf)) {
       pos = row_end + 6; continue;
     }
     _t_Operation_ID = buf[0] ? (float)atof(buf) : -9999.0f;
 
-    extract_tag(row_start, "Threshold", buf, sizeof(buf));
+    extract_tag(row_buf, "Threshold", buf, sizeof(buf));
     if (buf[0] && !validate_variables_constraints_value(COL_VARIABLES_CONSTRAINTS_THRESHOLD_FLOAT, buf)) {
       pos = row_end + 6; continue;
     }
     _t_Threshold = buf[0] ? (float)atof(buf) : -9999.0f;
 
-    extract_tag(row_start, "Fault_Code", buf, sizeof(buf));
+    extract_tag(row_buf, "Fault_Code", buf, sizeof(buf));
     if (buf[0] && !validate_variables_constraints_value(COL_VARIABLES_CONSTRAINTS_FAULT_CODE_FLOAT, buf)) {
       pos = row_end + 6; continue;
     }
     _t_Fault_Code = buf[0] ? (float)atof(buf) : -9999.0f;
 
-    extract_tag(row_start, "Increment", buf, sizeof(buf));
+    extract_tag(row_buf, "Increment", buf, sizeof(buf));
     if (buf[0] && !validate_variables_constraints_value(COL_VARIABLES_CONSTRAINTS_INCREMENT_FLOAT, buf)) {
       pos = row_end + 6; continue;
     }
@@ -199,8 +210,10 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
       constraints_tbl->rows[constraints_count].Increment = _t_Increment;
       constraints_tbl->rows[constraints_count].value_ptr = &description_tbl->rows[description_count].Value;
       description_tbl->rows[description_count].constraint_id = constraints_count;
-      if (_t_Increment != -9999.0f && _t_Increment != 0.0f) {
-        increment_loop_pool[increment_loop_count++] = constraints_count;
+      if (_t_Increment != -9999.0f) {
+        increment_pool.rows[increment_pool.count].Increment = _t_Increment;
+        increment_pool.rows[increment_pool.count].value_ptr = &description_tbl->rows[description_count].Value;
+        increment_pool.count++;
       }
       constraints_count++;
     } else {
@@ -210,25 +223,25 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
     /* ── modbus: parse into temporaries, commit only if any field is non-default ── */
     float _t_Slave_ID, _t_Function_ID, _t_Start_Address, _t_Data_Length;
 
-    extract_tag(row_start, "Slave_ID", buf, sizeof(buf));
+    extract_tag(row_buf, "Slave_ID", buf, sizeof(buf));
     if (buf[0] && !validate_variables_modbus_value(COL_VARIABLES_MODBUS_SLAVE_ID_FLOAT, buf)) {
       pos = row_end + 6; continue;
     }
     _t_Slave_ID = buf[0] ? (float)atof(buf) : -9999.0f;
 
-    extract_tag(row_start, "Function_ID", buf, sizeof(buf));
+    extract_tag(row_buf, "Function_ID", buf, sizeof(buf));
     if (buf[0] && !validate_variables_modbus_value(COL_VARIABLES_MODBUS_FUNCTION_ID_FLOAT, buf)) {
       pos = row_end + 6; continue;
     }
     _t_Function_ID = buf[0] ? (float)atof(buf) : -9999.0f;
 
-    extract_tag(row_start, "Start_Address", buf, sizeof(buf));
+    extract_tag(row_buf, "Start_Address", buf, sizeof(buf));
     if (buf[0] && !validate_variables_modbus_value(COL_VARIABLES_MODBUS_START_ADDRESS_FLOAT, buf)) {
       pos = row_end + 6; continue;
     }
     _t_Start_Address = buf[0] ? (float)atof(buf) : -9999.0f;
 
-    extract_tag(row_start, "Data_Length", buf, sizeof(buf));
+    extract_tag(row_buf, "Data_Length", buf, sizeof(buf));
     if (buf[0] && !validate_variables_modbus_value(COL_VARIABLES_MODBUS_DATA_LENGTH_FLOAT, buf)) {
       pos = row_end + 6; continue;
     }
@@ -274,6 +287,7 @@ void free_variables_description_table(variables_description_table_t *tbl) {
 /* ── load Variables from SPIFFS into all subcat tables; falls back to embedded default if absent or empty ── */
 int load_variables_from_spiffs(void) {
   free_variables_description_table(&variables_description_table);
+  increment_pool.count = 0;
   String content;
   File f = SPIFFS.open("/Variables.xml", "r");
   if (f) { content = f.readString(); f.close(); }

@@ -931,7 +931,7 @@ def _gen_field_extract(lines, name, typ, prefix, PREFIX, tbl_var, idx="count"):
     ci_upper = ci.upper()
     enum_val = f"COL_{PREFIX}_{ci_upper}_{typ.upper()}"
 
-    lines.append(f'    extract_tag(row_start, "{ci}", buf, sizeof(buf));')
+    lines.append(f'    extract_tag(row_buf, "{ci}", buf, sizeof(buf));')
     lines.append(f"    if (buf[0] && !validate_{prefix}_value({enum_val}, buf)) {{")
     lines.append(f"      pos = row_end + 6; continue;")
     lines.append(f"    }}")
@@ -979,6 +979,7 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
     lines.append("#include <math.h>")
     if xml_map:
         lines.append('#include "xml_defaults.h"')
+    lines.append('#include "acms_web.h"')
     lines.append("")
 
     # ── define table instances ──
@@ -1023,10 +1024,6 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                     else:
                         inits.append("0")
                 lines.append(f"settings_{sl}_t settings_{sl} = {{ {', '.join(inits)} }};")
-
-    # ── increment_loop_pool: holds constraints-table indices where Increment != 0 ──
-    lines.append("uint16_t increment_loop_pool[MAX_VARIABLES_CONSTRAINTS_ROWS];")
-    lines.append("uint16_t increment_loop_count = 0;")
 
     lines.append("")
 
@@ -1101,6 +1098,13 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
             lines.append("    if (!row_start) break;")
             lines.append('    const char *row_end = strstr(row_start, "</row>");')
             lines.append("    if (!row_end) break;")
+            lines.append("    /* Scope searches to the current row — prevents self-closing tags in")
+            lines.append("     * later rows from shadowing real values in the current row. */")
+            lines.append("    int row_len = row_end - row_start;")
+            lines.append("    char row_buf[1024];")
+            lines.append("    if (row_len >= (int)sizeof(row_buf)) { pos = row_end + 6; continue; }")
+            lines.append("    memcpy(row_buf, row_start, row_len);")
+            lines.append("    row_buf[row_len] = '\\0';")
             lines.append("")
 
             if has_optional:
@@ -1134,7 +1138,7 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                         ci_upper = ci.upper()
                         enum_val = f"COL_{PREFIX_O}_{ci_upper}_{typ.upper()}"
                         temp = f"_t_{ci}"
-                        lines.append(f'    extract_tag(row_start, "{ci}", buf, sizeof(buf));')
+                        lines.append(f'    extract_tag(row_buf, "{ci}", buf, sizeof(buf));')
                         lines.append(f"    if (buf[0] && !validate_{prefix_o}_value({enum_val}, buf)) {{")
                         lines.append(f"      pos = row_end + 6; continue;")
                         lines.append(f"    }}")
@@ -1154,11 +1158,13 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                         lines.append(f"      {osl}_tbl->rows[{osl}_count].value_ptr = &{src_sl}_tbl->rows[{src_sl}_count].Value;")
                         if "constraint" in osl:
                             lines.append(f"      {src_sl}_tbl->rows[{src_sl}_count].constraint_id = {osl}_count;")
-                            # Save to increment_loop_pool if Increment is present and non-zero
+                            # Populate increment_pool directly if Increment is non-null
                             inc_temp = next((tv for fn, tv in temp_vars if c_ident(fn) == "Increment"), None)
                             if inc_temp:
-                                lines.append(f"      if ({inc_temp} != -9999.0f && {inc_temp} != 0.0f) {{")
-                                lines.append(f"        increment_loop_pool[increment_loop_count++] = {osl}_count;")
+                                lines.append(f"      if ({inc_temp} != -9999.0f) {{")
+                                lines.append(f"        increment_pool.rows[increment_pool.count].Increment = {inc_temp};")
+                                lines.append(f"        increment_pool.rows[increment_pool.count].value_ptr = &{src_sl}_tbl->rows[{src_sl}_count].Value;")
+                                lines.append(f"        increment_pool.count++;")
                                 lines.append(f"      }}")
                         lines.append(f"      {osl}_count++;")
                         lines.append("    } else {")
@@ -1270,6 +1276,9 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                 if string_fields:
                     lines.append(f"  free_{prefix}_table(&{prefix}_table);")
 
+            if any("constraint" in osc.lower() for osc in optional_scs):
+                lines.append("  increment_pool.count = 0;")
+
             if t in xml_map:
                 lines.append(f"  String content;")
                 lines.append(f'  File f = SPIFFS.open("/{t}.xml", "r");')
@@ -1317,6 +1326,11 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
             lines.append("    if (!row_start) break;")
             lines.append('    const char *row_end = strstr(row_start, "</row>");')
             lines.append("    if (!row_end) break;")
+            lines.append("    int row_len = row_end - row_start;")
+            lines.append("    char row_buf[512];")
+            lines.append("    if (row_len >= (int)sizeof(row_buf)) { pos = row_end + 6; continue; }")
+            lines.append("    memcpy(row_buf, row_start, row_len);")
+            lines.append("    row_buf[row_len] = '\\0';")
             lines.append("")
 
             for name, typ in fields:
