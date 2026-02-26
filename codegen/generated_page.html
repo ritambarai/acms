@@ -205,6 +205,7 @@ th.row-actions {
   color: #cc6600;
   cursor: pointer;
   font-weight: bold;
+  margin-right: 6px;
 }
 
 /* ===== BUTTON ===== */
@@ -617,9 +618,9 @@ var Variables_SCHEMA = [
 var TABLE_LIST = ["Metadata", "Variables"];
 
 var Settings_SUBCATS = {
-  general: ["SSID", "Password", "Class_Pool_Size", "Var_Pool_Size"],
-  mqtt: ["Host", "Port", "Data_Topic", "Alert_Topic", "Username", "Password"],
-  json includes: ["Metadata", "Constraints", "Type_Unit"]
+  "general": ["SSID", "Password", "Class_Pool_Size", "Var_Pool_Size"],
+  "mqtt": ["Host", "Port", "Data_Topic", "Alert_Topic", "Username", "Password"],
+  "json includes": ["Metadata", "Constraints", "Type_Unit"]
 };
 var Settings_TABLE_COLS = ["SSID", "Password", "Class_Pool_Size", "Var_Pool_Size", "Host", "Port", "Data_Topic", "Alert_Topic", "Username", "Password", "Metadata", "Constraints", "Type_Unit"];
 
@@ -631,7 +632,7 @@ var PRELOAD_XML = {
 };
 
 /* ======== PRELOADED SETTINGS (embedded at build time, PC only) ======== */
-var PRELOAD_SETTINGS = "<Settings>\n  <row><general><SSID>Ritam iPhone</SSID><Password>password</Password><Class_Pool_Size>32</Class_Pool_Size><Var_Pool_Size>128</Var_Pool_Size></general></row>\n  <row><mqtt><Host>mqtt-server.ddns.net</Host><Port>1883</Port><Data_Topic>ACMS_Rey/01/</Data_Topic><Alert_Topic>ACMS_Rey/01/</Alert_Topic><Username></Username><Mqtt_Password></Mqtt_Password></mqtt></row>\n  <row><json><Metadata>true</Metadata><Constraints>true</Constraints><Type_Unit>true</Type_Unit></json></row>\n</Settings>";
+var PRELOAD_SETTINGS = "<Settings>\n  <row><general><SSID>Ritam iPhone</SSID><Password>password</Password><Class_Pool_Size>32</Class_Pool_Size><Var_Pool_Size>128</Var_Pool_Size></general></row>\n  <row><mqtt><Host>mqtt-server.ddns.net</Host><Port>1883</Port><Data_Topic>ACMS_Rey/01/</Data_Topic><Alert_Topic>ACMS_Rey/01/</Alert_Topic><Username></Username><Mqtt_Password></Mqtt_Password></mqtt></row>\n  <row><json_includes><Metadata>true</Metadata><Constraints>true</Constraints><Type_Unit>true</Type_Unit></json_includes></row>\n</Settings>";
 
 /* ======== STABLE JS LOGIC (INJECTED FROM CODEGEN) ======== */
 /* ======== STABLE JS LOGIC ======== */

@@ -84,6 +84,6 @@ static const char SETTINGS_XML_DEFAULT[] = R"XMLRAW(
 <Settings>
   <row><general><SSID>Ritam iPhone</SSID><Password>password</Password><Class_Pool_Size>32</Class_Pool_Size><Var_Pool_Size>128</Var_Pool_Size></general></row>
   <row><mqtt><Host>mqtt-server.ddns.net</Host><Port>1883</Port><Data_Topic>ACMS_Rey/01/</Data_Topic><Alert_Topic>ACMS_Rey/01/</Alert_Topic><Username></Username><Mqtt_Password></Mqtt_Password></mqtt></row>
-  <row><json><Metadata>true</Metadata><Constraints>true</Constraints><Type_Unit>true</Type_Unit></json></row>
+  <row><json_includes><Metadata>true</Metadata><Constraints>true</Constraints><Type_Unit>true</Type_Unit></json_includes></row>
 </Settings>
 )XMLRAW";
