@@ -343,13 +343,53 @@ function validateValidityField(input) {
       /* class key = 'type'; Value must match a Key in Metadata where Class='type' */
       classKey = Object.keys(dict).find(function(k) { return k.toLowerCase() === "type"; }) || "type";
     } else {
-      /* no Metadata validation for other Type values */
-      input.style.borderColor = "";
-      input.classList.remove("invalid");
-      errSpan.textContent = "";
-      errSpan.style.color = "";
-      updateInsertBtn(input);
-      return true;
+      /* look up variable data type to decide how to treat Value */
+      var clsInp = form.querySelector('[data-name="Class"]');
+      var nmInp  = form.querySelector('[data-name="Name"]');
+      var clsVal = clsInp ? clsInp.value.trim() : "";
+      var nmVal  = nmInp  ? nmInp.value.trim()  : "";
+      var varDict = buildVariableDict();
+      var clsKey2 = Object.keys(varDict).find(function(k) { return k.toLowerCase() === clsVal.toLowerCase(); });
+      var nmKey2  = clsKey2 ? Object.keys(varDict[clsKey2]).find(function(k) { return k.toLowerCase() === nmVal.toLowerCase(); }) : null;
+      if (!nmKey2) {
+        input.style.borderColor = "";
+        input.classList.remove("invalid");
+        errSpan.textContent = "";
+        errSpan.style.color = "";
+        updateInsertBtn(input);
+        return true;
+      }
+      var nmDict = varDict[clsKey2][nmKey2];
+      /* resolve type label */
+      var tRK = Object.keys(nmDict).find(function(k) { return k.toLowerCase() === "type"; });
+      var tLabel = "";
+      if (tRK) {
+        var tKV = (nmDict[tRK]["Value"] !== null && nmDict[tRK]["Value"] !== undefined) ? String(nmDict[tRK]["Value"]) : "";
+        var tKN = (tKV !== "" && isFinite(tKV)) ? String(parseFloat(tKV)) : tKV;
+        var tCK = Object.keys(dict).find(function(k) { return k.toLowerCase() === "type"; }) || "type";
+        tLabel = (dict[tCK] && dict[tCK].hasOwnProperty(tKN)) ? dict[tCK][tKN].toLowerCase() : "";
+      }
+      if (tLabel === "choice") {
+        /* validate Value as a choice key: Metadata[varName][value] = choice label */
+        classKey = Object.keys(dict).find(function(k) { return k.toLowerCase() === nmKey2.toLowerCase(); }) || nmKey2;
+        /* fall through to Metadata lookup below */
+      } else {
+        /* numeric/other: show unit as a green hint, no hard validation */
+        var uRK = Object.keys(nmDict).find(function(k) { return k.toLowerCase() === "unit"; });
+        var uMsg = null;
+        if (uRK) {
+          var uKV = (nmDict[uRK]["Value"] !== null && nmDict[uRK]["Value"] !== undefined) ? String(nmDict[uRK]["Value"]) : "";
+          var uKN = (uKV !== "" && isFinite(uKV)) ? String(parseFloat(uKV)) : uKV;
+          var uCK = Object.keys(dict).find(function(k) { return k.toLowerCase() === nmKey2.toLowerCase(); });
+          uMsg = (uCK && dict[uCK].hasOwnProperty(uKN)) ? dict[uCK][uKN] : null;
+        }
+        input.style.borderColor = uMsg !== null ? "green" : "";
+        input.classList.remove("invalid");
+        errSpan.textContent = uMsg !== null ? uMsg.toUpperCase() : "";
+        errSpan.style.color = uMsg !== null ? "green" : "";
+        updateInsertBtn(input);
+        return true;
+      }
     }
   }
 
