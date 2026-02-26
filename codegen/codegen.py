@@ -2564,6 +2564,7 @@ function settingsChanged() {
 
 /* ---------- AUTO-SAVE BOOLEAN SETTING ON CHECKBOX TOGGLE ---------- */
 async function saveCheckboxSetting(el) {
+  settingsChanged();
   state["Settings"][el.dataset.name] = String(el.checked);
   if (location.hostname === "") return;
   try {
