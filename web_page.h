@@ -142,6 +142,7 @@ body {
 .table-wrap {
   flex: 1;
   overflow-y: auto;
+  overflow-x: auto;
   margin-top: 10px;
 }
 
@@ -160,10 +161,29 @@ th {
   background: #eee;
 }
 
+.row-actions {
+  position: sticky;
+  right: 0;
+  background: #fff;
+  white-space: nowrap;
+  border-left: 2px solid #bbb;
+}
+
+th.row-actions {
+  background: #eee;
+}
+
 .delete {
   color: red;
   cursor: pointer;
   font-weight: bold;
+}
+
+.copy-row {
+  color: #0066cc;
+  cursor: pointer;
+  font-weight: bold;
+  margin-right: 6px;
 }
 
 /* ===== BUTTON ===== */
@@ -285,22 +305,22 @@ button {
       <div class="form-grid">
         <div class="field">
           <label>SSID</label>
-          <input placeholder="string" data-type="string" data-name="SSID" oninput="validateField(this)">
+          <input placeholder="string" data-type="string" data-name="SSID" oninput="validateField(this); settingsChanged()">
           <span class="error-msg"></span>
         </div>
         <div class="field">
           <label>Password</label>
-          <input placeholder="string" data-type="string" data-name="Password" oninput="validateField(this)">
+          <input placeholder="string" data-type="string" data-name="Password" oninput="validateField(this); settingsChanged()">
           <span class="error-msg"></span>
         </div>
         <div class="field">
           <label>Class Pool Size</label>
-          <input placeholder="integer" data-type="integer" data-name="Class_Pool_Size" oninput="validateField(this)">
+          <input placeholder="integer" data-type="integer" data-name="Class_Pool_Size" oninput="validateField(this); settingsChanged()">
           <span class="error-msg"></span>
         </div>
         <div class="field">
           <label>Var Pool Size</label>
-          <input placeholder="integer" data-type="integer" data-name="Var_Pool_Size" oninput="validateField(this)">
+          <input placeholder="integer" data-type="integer" data-name="Var_Pool_Size" oninput="validateField(this); settingsChanged()">
           <span class="error-msg"></span>
         </div>
       </div>
@@ -310,32 +330,32 @@ button {
       <div class="form-grid">
         <div class="field">
           <label>Host</label>
-          <input placeholder="string" data-type="string" data-name="Host" oninput="validateField(this)">
+          <input placeholder="string" data-type="string" data-name="Host" oninput="validateField(this); settingsChanged()">
           <span class="error-msg"></span>
         </div>
         <div class="field">
           <label>Port</label>
-          <input placeholder="integer" data-type="integer" data-name="Port" oninput="validateField(this)">
+          <input placeholder="integer" data-type="integer" data-name="Port" oninput="validateField(this); settingsChanged()">
           <span class="error-msg"></span>
         </div>
         <div class="field">
           <label>Data Topic</label>
-          <input placeholder="string" data-type="string" data-name="Data_Topic" oninput="validateField(this)">
+          <input placeholder="string" data-type="string" data-name="Data_Topic" oninput="validateField(this); settingsChanged()">
           <span class="error-msg"></span>
         </div>
         <div class="field">
           <label>Alert Topic</label>
-          <input placeholder="string" data-type="string" data-name="Alert_Topic" oninput="validateField(this)">
+          <input placeholder="string" data-type="string" data-name="Alert_Topic" oninput="validateField(this); settingsChanged()">
           <span class="error-msg"></span>
         </div>
         <div class="field">
           <label>Username</label>
-          <input placeholder="string" data-type="string" data-name="Username" oninput="validateField(this)">
+          <input placeholder="string" data-type="string" data-name="Username" oninput="validateField(this); settingsChanged()">
           <span class="error-msg"></span>
         </div>
         <div class="field">
           <label>Mqtt Password</label>
-          <input placeholder="string" data-type="string" data-name="Mqtt_Password" oninput="validateField(this)">
+          <input placeholder="string" data-type="string" data-name="Mqtt_Password" oninput="validateField(this); settingsChanged()">
           <span class="error-msg"></span>
         </div>
       </div>
@@ -345,43 +365,22 @@ button {
       <div class="form-grid">
         <div class="field">
           <label>Metadata</label>
-          <input type="checkbox" data-type="boolean" data-name="Metadata" class="settings-checkbox">
+          <input type="checkbox" data-type="boolean" data-name="Metadata" class="settings-checkbox" onchange="settingsChanged()">
           <span class="error-msg"></span>
         </div>
         <div class="field">
           <label>Constraints</label>
-          <input type="checkbox" data-type="boolean" data-name="Constraints" class="settings-checkbox">
+          <input type="checkbox" data-type="boolean" data-name="Constraints" class="settings-checkbox" onchange="settingsChanged()">
           <span class="error-msg"></span>
         </div>
         <div class="field">
           <label>Modbus</label>
-          <input type="checkbox" data-type="boolean" data-name="Modbus" class="settings-checkbox">
+          <input type="checkbox" data-type="boolean" data-name="Modbus" class="settings-checkbox" onchange="settingsChanged()">
           <span class="error-msg"></span>
         </div>
       </div>
     </div>
-    <button onclick="saveSettings()" class="insert-btn">Save</button>
-    <div class="table-wrap">
-      <table>
-      <thead><tr>
-        <th>Category</th>
-        <th>SSID</th>
-        <th>Password</th>
-        <th>Class_Pool_Size</th>
-        <th>Var_Pool_Size</th>
-        <th>Host</th>
-        <th>Port</th>
-        <th>Data_Topic</th>
-        <th>Alert_Topic</th>
-        <th>Username</th>
-        <th>Mqtt_Password</th>
-        <th>Metadata</th>
-        <th>Constraints</th>
-        <th>Modbus</th>
-      </tr></thead>
-      <tbody id="Settings_body"></tbody>
-      </table>
-    </div>
+    <button id="settings-save-btn" onclick="saveSettings()" class="insert-btn" disabled>Save</button>
   </div>
 </div>
 
@@ -421,7 +420,7 @@ button {
       <th>Class</th>
       <th>Key</th>
       <th>Message</th>
-      <th>X</th>
+      <th class="row-actions"></th>
     </tr></thead>
     <tbody id="Metadata_body"></tbody>
   </table>
@@ -464,31 +463,6 @@ button {
     </div>
   </div>
   <div class="subcat-row">
-    <span class="subcat-label">constraints</span>
-    <div class="form-grid">
-    <div class="field">
-      <label>Operation_ID</label>
-      <input placeholder="float" data-type="float" data-name="Operation_ID" data-field="Operation_ID" oninput="validateValidityField(this)">
-      <span class="error-msg"></span>
-    </div>
-    <div class="field">
-      <label>Threshold</label>
-      <input placeholder="float" data-type="float" data-name="Threshold" oninput="validateField(this)">
-      <span class="error-msg"></span>
-    </div>
-    <div class="field">
-      <label>Fault_Code</label>
-      <input placeholder="float" data-type="float" data-name="Fault_Code" data-field="Fault_Code" oninput="validateValidityField(this)">
-      <span class="error-msg"></span>
-    </div>
-    <div class="field">
-      <label>Increment</label>
-      <input placeholder="float" data-type="float" data-name="Increment" oninput="validateField(this)">
-      <span class="error-msg"></span>
-    </div>
-    </div>
-  </div>
-  <div class="subcat-row">
     <span class="subcat-label">modbus</span>
     <div class="form-grid">
     <div class="field">
@@ -513,6 +487,31 @@ button {
     </div>
     </div>
   </div>
+  <div class="subcat-row">
+    <span class="subcat-label">constraints</span>
+    <div class="form-grid">
+    <div class="field">
+      <label>Operation_ID</label>
+      <input placeholder="float" data-type="float" data-name="Operation_ID" data-field="Operation_ID" oninput="validateValidityField(this)">
+      <span class="error-msg"></span>
+    </div>
+    <div class="field">
+      <label>Threshold</label>
+      <input placeholder="float" data-type="float" data-name="Threshold" oninput="validateField(this)">
+      <span class="error-msg"></span>
+    </div>
+    <div class="field">
+      <label>Fault_Code</label>
+      <input placeholder="float" data-type="float" data-name="Fault_Code" data-field="Fault_Code" oninput="validateValidityField(this)">
+      <span class="error-msg"></span>
+    </div>
+    <div class="field">
+      <label>Increment</label>
+      <input placeholder="float" data-type="float" data-name="Increment" oninput="validateField(this)">
+      <span class="error-msg"></span>
+    </div>
+    </div>
+  </div>
 
   </div>
 
@@ -523,15 +522,15 @@ button {
       <th>Name</th>
       <th>Type</th>
       <th>Value</th>
-      <th>Operation_ID</th>
-      <th>Threshold</th>
-      <th>Fault_Code</th>
-      <th>Increment</th>
       <th>Slave_ID</th>
       <th>Function_ID</th>
       <th>Start_Address</th>
       <th>Data_Length</th>
-      <th>X</th>
+      <th>Operation_ID</th>
+      <th>Threshold</th>
+      <th>Fault_Code</th>
+      <th>Increment</th>
+      <th class="row-actions"></th>
     </tr></thead>
     <tbody id="Variables_body"></tbody>
   </table>
@@ -556,14 +555,14 @@ var Variables_SCHEMA = [
   { name:"Name", type:"string" },
   { name:"Type", type:"string" },
   { name:"Value", type:"float" },
-  { name:"Operation_ID", type:"float" },
-  { name:"Threshold", type:"float" },
-  { name:"Fault_Code", type:"float" },
-  { name:"Increment", type:"float" },
   { name:"Slave_ID", type:"float" },
   { name:"Function_ID", type:"float" },
   { name:"Start_Address", type:"float" },
-  { name:"Data_Length", type:"float" }
+  { name:"Data_Length", type:"float" },
+  { name:"Operation_ID", type:"float" },
+  { name:"Threshold", type:"float" },
+  { name:"Fault_Code", type:"float" },
+  { name:"Increment", type:"float" }
 ];
 
 var TABLE_LIST = ["Metadata", "Variables"];
@@ -726,7 +725,10 @@ function renderTable(table, schema) {
   state[table].forEach((r, i) => {
     let tr = "<tr>";
     r.forEach(v => { tr += `<td>${v ?? ""}</td>`; });
-    tr += `<td class="delete" onclick="deleteRow('${table}',${i})">X</td></tr>`;
+    tr += `<td class="row-actions">` +
+          `<span class="copy-row" onclick="copyRow('${table}',${i})" title="Copy to form">&#x2398;</span>` +
+          `<span class="delete" onclick="deleteRow('${table}',${i})" title="Delete">&#x2715;</span>` +
+          `</td></tr>`;
     body.innerHTML += tr;
   });
 
@@ -771,6 +773,21 @@ function deleteRow(table, i) {
   if (!state[table]) return;
   state[table].splice(i, 1);
   renderTable(table, window[table + "_SCHEMA"]);
+}
+
+
+/* ---------- COPY ROW TO FORM ---------- */
+function copyRow(table, i) {
+  const schema = window[table + "_SCHEMA"];
+  const row = state[table][i];
+  const form = document.getElementById(table + "_form");
+  if (!form || !row) return;
+  schema.forEach((f, idx) => {
+    const el = form.querySelector(`[data-name="${f.name}"]`);
+    if (!el) return;
+    el.value = row[idx] ?? "";
+    el.dispatchEvent(new Event(el.tagName === "SELECT" ? "change" : "input", { bubbles: true }));
+  });
 }
 
 
@@ -960,31 +977,10 @@ function downloadZIP() {
 
 
 /* ---------- UPDATE SETTINGS TABLE ---------- */
-function updateSettingsTable() {
-  var tbody = document.getElementById("Settings_body");
-  if (!tbody) return;
-  tbody.innerHTML = "";
-  Object.keys(Settings_SUBCATS).forEach(function(cat) {
-    var cat_val = Settings_SUBCATS[cat];
-    var tr = document.createElement("tr");
-    var catTd = document.createElement("td");
-    catTd.textContent = cat;
-    tr.appendChild(catTd);
-    Settings_TABLE_COLS.forEach(function(col) {
-      var td = document.createElement("td");
-      var belongs = false;
-      if (Array.isArray(cat_val)) {
-        belongs = cat_val.indexOf(col) !== -1;
-      } else {
-        Object.keys(cat_val).forEach(function(inner) {
-          if (cat_val[inner].indexOf(col) !== -1) belongs = true;
-        });
-      }
-      td.textContent = belongs ? (state["Settings"][col] !== undefined ? state["Settings"][col] : "") : "—";
-      tr.appendChild(td);
-    });
-    tbody.appendChild(tr);
-  });
+/* ---------- SETTINGS CHANGED ---------- */
+function settingsChanged() {
+  var btn = document.getElementById("settings-save-btn");
+  if (btn) btn.disabled = false;
 }
 
 
@@ -999,7 +995,6 @@ async function saveSettings() {
   console.group("[ACMS] Settings state");
   console.table(state["Settings"]);
   console.groupEnd();
-  updateSettingsTable();
   if (location.hostname !== "") {
     try {
       const r = await fetch("/Settings.xml", {
@@ -1014,6 +1009,8 @@ async function saveSettings() {
     }
   }
   alert("Updates have been saved successfully");
+  var btn = document.getElementById("settings-save-btn");
+  if (btn) btn.disabled = true;
 }
 
 
@@ -1079,7 +1076,10 @@ function loadSettings() {
         else inp.value = val;
       });
     })
-    .then(function() { updateSettingsTable(); })
+    .then(function() {
+      var btn = document.getElementById("settings-save-btn");
+      if (btn) btn.disabled = true;
+    })
     .catch(function(e) { console.error("[ACMS] loadSettings failed:", e); });
 }
 
