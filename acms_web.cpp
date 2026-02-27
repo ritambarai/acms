@@ -40,22 +40,25 @@ static uint32_t reboot_at      = 0;
 /* Deferred reload flags — set by the POST handler, consumed by http_task.
  * Keeps handlers fast and avoids sync_all() / MQTT publish inside a handler,
  * which would race with increment_task (Core 0) modifying the same tables. */
-static volatile bool reload_variables_pending = false;
-static volatile bool reload_metadata_pending  = false;
 static volatile bool reload_settings_pending  = false;
 
-/* Cooperative pause mechanism for table reloads.
+/* ── suspend_all_tasks() ─────────────────────────────────────────────────────
+ * Called once when the first table XML upload begins (UPLOAD_FILE_START).
+ * Stops increment_task and alert_publish_task before any SPIFFS write so
+ * there is no concurrent pool access or SPIFFS mutex contention.
  *
- * vTaskSuspend() is unsafe if the target task holds a mutex (deadlock risk).
- * Instead, http_task sets increment_pause_req, then waits on increment_ack_sem.
- * increment_task checks the flag at the START of each iteration — before any
- * pool access — gives the ack semaphore, then blocks on increment_go_sem until
- * http_task finishes modifying the tables and signals resume.
+ * increment_task is paused cooperatively: it checks increment_pause_req at
+ * the top of its loop (before any SPIFFS or pool access) and waits there.
+ * If it does not ack within 5 s, vTaskSuspend is used as a hard fallback.
+ * alert_publish_task is suspended directly — it never touches SPIFFS.
  *
- * Guaranteed safe: ack is given only at a point where no mutexes are held. */
-static volatile bool     increment_pause_req = false;
-static SemaphoreHandle_t increment_ack_sem   = NULL;   /* increment → http: "I'm paused" */
-static SemaphoreHandle_t increment_go_sem    = NULL;   /* http → increment: "resume"     */
+ * Tasks are NOT resumed.  Submit always ends with /reboot, so the restart
+ * brings everything back up cleanly from the newly written SPIFFS files. */
+static volatile bool     increment_pause_req    = false;
+static SemaphoreHandle_t increment_ack_sem      = NULL;
+static SemaphoreHandle_t increment_go_sem       = NULL;   /* keeps increment_task blocked after ack */
+static TaskHandle_t      increment_task_handle  = NULL;
+static bool              tasks_suspended        = false;
 
 /* =========================================================
  * ADDRESS POOL (STABLE BACKING STORAGE FOR ext_addr)
@@ -213,6 +216,43 @@ static void handle_post_xml() {
   reload_settings_pending = true;
 }
 
+/* ── Stop all user tasks before touching SPIFFS during a submit sequence ── */
+extern "C" TaskHandle_t alert_publish_task_handle;  /* alert_manager.cpp */
+
+static void suspend_all_tasks(void)
+{
+    if (tasks_suspended) return;
+    tasks_suspended = true;
+
+    /* ── 1. Cooperatively pause increment_task ──────────────────────────────
+     * Drain any stale semaphore tokens from a previous (failed) attempt,
+     * then signal the task and wait up to 5 s for it to reach its safe
+     * checkpoint (top of loop, no mutexes held, no SPIFFS access). */
+    if (increment_task_handle && increment_ack_sem && increment_go_sem) {
+        xSemaphoreTake(increment_ack_sem, 0);   /* drain stale token */
+        xSemaphoreTake(increment_go_sem,  0);   /* drain stale token */
+
+        increment_pause_req = true;
+        if (xSemaphoreTake(increment_ack_sem, pdMS_TO_TICKS(5000)) == pdTRUE) {
+            /* Task is now blocked on go_sem — stays paused until reboot. */
+            Serial.println("[Submit] increment_task safely paused");
+        } else {
+            /* Timeout — force-suspend.  Safe: reboot follows immediately, so
+             * any mutex the task might hold will never be needed again. */
+            Serial.println("[Submit] increment_task pause timeout — forcing suspend");
+            vTaskSuspend(increment_task_handle);
+        }
+    }
+
+    /* ── 2. Suspend alert_publish_task directly ─────────────────────────────
+     * This task never accesses SPIFFS, so vTaskSuspend is safe regardless
+     * of where it happens to be when we call it. */
+    if (alert_publish_task_handle) {
+        vTaskSuspend(alert_publish_task_handle);
+        Serial.println("[Submit] alert_publish_task suspended");
+    }
+}
+
 /* ── Streaming upload handler for large table XMLs (Variables, Metadata).
  * Writes each multipart chunk directly to SPIFFS so the entire body never
  * needs to fit in a single heap allocation — avoiding OOM on ~15 KB tables.
@@ -223,10 +263,11 @@ static void handle_upload_table_xml() {
   HTTPUpload &up = server.upload();
 
   if (up.status == UPLOAD_FILE_START) {
+    /* Stop all tasks before touching SPIFFS — prevents pool/SPIFFS races. */
+    suspend_all_tasks();
+
     String path = server.uri();
     Serial.printf("UPLOAD %s  (start)\n", path.c_str());
-    /* Only open the file if the request is authenticated; writes are
-     * skipped (file stays closed) if auth will fail in the main handler. */
     if (server.authenticate(web_user, web_pass))
       s_upload_file = SPIFFS.open(path, "w");
 
@@ -249,13 +290,9 @@ static void handle_upload_table_xml() {
 /* ── Completion handler — called after the upload finishes ── */
 static void handle_post_table_xml() {
   if (!require_auth()) return;
-  String uri = server.uri();
-
-  /* Respond immediately; reloads are deferred to http_task (see below). */
+  /* File already written to SPIFFS by the streaming upload handler.
+   * Tasks are suspended; reboot (sent next by the browser) reloads everything. */
   server.send(200, "text/plain", "OK");
-
-  if      (uri == "/Variables.xml") reload_variables_pending = true;
-  else if (uri == "/Metadata.xml")  reload_metadata_pending  = true;
 }
 
 /* =========================================================
@@ -307,52 +344,14 @@ static void http_task(void *pvParameters)
     for (;;) {
         server.handleClient();
 
-        /* Process deferred reloads — only when no reboot is scheduled.
-         * During a submit sequence the browser always ends with /reboot, so
-         * reboot_pending becomes true before these flags are consumed; we skip
-         * the reload entirely and let the restart load everything from SPIFFS.
-         * For standalone POSTs (no reboot) the reload runs normally here,
-         * outside any handler context, safe from reentrancy issues. */
-        if (!reboot_pending) {
-            bool need_pause = reload_metadata_pending || reload_variables_pending;
-
-            if (need_pause && increment_ack_sem && increment_go_sem) {
-                /* Ask increment_task to pause at its next safe checkpoint. */
-                increment_pause_req = true;
-                bool acked = (xSemaphoreTake(increment_ack_sem,
-                                             pdMS_TO_TICKS(3000)) == pdTRUE);
-                if (!acked) {
-                    /* Timeout — task didn't respond; abort reload to avoid deadlock. */
-                    increment_pause_req = false;
-                    Serial.println("[Reload] increment_task pause timeout — reload skipped");
-                    goto reload_done;
-                }
-            }
-
-            if (reload_metadata_pending) {
-                reload_metadata_pending = false;
-                load_metadata_from_spiffs();
-                am_fault_map_build();
-            }
-            if (reload_variables_pending) {
-                reload_variables_pending = false;
-                load_variables_from_spiffs();
-            }
-
-            if (need_pause && increment_ack_sem && increment_go_sem) {
-                increment_pause_req = false;
-                xSemaphoreGive(increment_go_sem);   /* release increment_task */
-            }
-
-            if (reload_settings_pending) {
-                reload_settings_pending = false;
-                /* Settings reload only touches settings_* structs, not var_pool —
-                 * no cooperative pause needed. */
-                load_settings_from_spiffs();
-                wifi_credentials_save(settings_general.SSID, settings_general.Password);
-            }
+        /* Settings.xml can be saved standalone (e.g. SSID change) without a
+         * reboot.  It only modifies settings_* structs, not the shared pools,
+         * so no task suspension is needed. */
+        if (!reboot_pending && reload_settings_pending) {
+            reload_settings_pending = false;
+            load_settings_from_spiffs();
+            wifi_credentials_save(settings_general.SSID, settings_general.Password);
         }
-        reload_done:
 
         if (reboot_pending && millis() >= reboot_at) {
             Serial.flush();   /* drain any buffered Serial output before reset */
@@ -589,7 +588,7 @@ void acms_system_init(const char *login_user, const char *login_pass)
   increment_ack_sem = xSemaphoreCreateBinary();
   increment_go_sem  = xSemaphoreCreateBinary();
 
-  xTaskCreate(increment_task, "increment", 4096, NULL, 1, NULL);
+  xTaskCreate(increment_task, "increment", 4096, NULL, 1, &increment_task_handle);
   xTaskCreatePinnedToCore(http_task, "http", 8192, NULL, 10, NULL, 1);
 
   Serial.println("Variables registered");
