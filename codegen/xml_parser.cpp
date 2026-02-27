@@ -20,7 +20,7 @@ metadata_table_t metadata_table = { .count = 0, .version = 0 };
 variables_description_table_t variables_description_table = { .count = 0, .version = 0 };
 variables_modbus_table_t variables_modbus_table = { .count = 0, .version = 0 };
 variables_constraints_table_t variables_constraints_table = { .count = 0, .version = 0 };
-settings_general_t settings_general = { NULL, NULL, 0, 0 };
+settings_general_t settings_general = { NULL, NULL, 0, 0, 0 };
 settings_mqtt_t settings_mqtt = { NULL, 0, NULL, NULL, NULL, NULL };
 settings_json_includes_t settings_json_includes = { false, false, false };
 
@@ -408,6 +408,8 @@ static void parse_settings_xml(const char *xml) {
       settings_general.Class_Pool_Size = buf[0] ? (int32_t)strtol(buf, NULL, 10) : 0;
       extract_tag(row_start, "Var_Pool_Size", buf, sizeof(buf));
       settings_general.Var_Pool_Size = buf[0] ? (int32_t)strtol(buf, NULL, 10) : 0;
+      extract_tag(row_start, "Alert_cooldown", buf, sizeof(buf));
+      settings_general.Alert_cooldown = buf[0] ? (float)atof(buf) : 0.0f;
     }
 
     /* ── mqtt ── */

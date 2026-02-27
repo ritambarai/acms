@@ -106,7 +106,6 @@ static void log_alert_ptr(const alert_t *a)
         "\"value\":%.2f,"
         "\"threshold\":%.2f,"
         "\"fault_code\":%.0f,"
-        "\"operation_id\":%.0f,"
         "\"fault_message\":\"%s\","
         "\"datetime\":\"%s\""
         "}\n",
@@ -119,7 +118,6 @@ static void log_alert_ptr(const alert_t *a)
         a->value,
         a->threshold,
         a->fault_code,
-        a->operation_id,
         a->fault_message ? a->fault_message : "",
         a->datetime);
 
@@ -279,18 +277,18 @@ void add_alert_queue(uint16_t var_id, uint16_t constraint_id)
         if (last->var_idx == var_id &&
             (int32_t)last->fault_code == (int32_t)tmp.fault_code) {
 
-            const int32_t dedup_m = (int32_t)ALERT_DEDUP_MIN_MINUTES;
+            const float dedup_m = effective_alert_cooldown();
             bool suppress;
 
-            if (dedup_m < 0 || dedup_m == (int32_t)INVALID_INDEX) {
-                /* Always suppress duplicates (infinite cooldown) */
+            if (dedup_m < 0.0f) {
+                /* Negative → always suppress duplicates (infinite cooldown) */
                 suppress = true;
-            } else if (dedup_m == 0) {
-                /* No deduplication — every trigger enqueued */
+            } else if (dedup_m == 0.0f) {
+                /* Zero → no deduplication, every trigger enqueued */
                 suppress = false;
             } else {
-                int32_t elapsed_s = (int32_t)(tmp.timestamp - last->timestamp);
-                suppress = (elapsed_s < dedup_m * 60);
+                float elapsed_s = (float)(tmp.timestamp - last->timestamp);
+                suppress = (elapsed_s < dedup_m * 60.0f);
             }
 
             if (suppress) {
@@ -361,20 +359,22 @@ static void alert_publish_task(void *pvParameters)
             "\"class_name\":\"%s\","
             "\"var_name\":\"%s\","
             "\"var_type\":\"%s\","
+            "\"var_idx\":%u,"
+            "\"constraint_id\":%u,"
             "\"value\":%.2f,"
             "\"threshold\":%.2f,"
             "\"fault_code\":%.0f,"
-            "\"operation_id\":%.0f,"
             "\"fault_message\":\"%s\","
             "\"datetime\":\"%s\""
             "}",
             local.class_name    ? local.class_name    : "",
             local.var_name      ? local.var_name      : "",
             local.var_type      ? local.var_type      : "",
+            local.var_idx,
+            local.constraint_id,
             local.value,
             local.threshold,
             local.fault_code,
-            local.operation_id,
             local.fault_message ? local.fault_message : "",
             local.datetime);
 
