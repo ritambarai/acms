@@ -171,7 +171,7 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
     if (buf[0]) { strncpy(_t_Name, buf, sizeof(_t_Name)-1); _t_Name[sizeof(_t_Name)-1] = '\0'; }
     else _t_Name[0] = '\0';
 
-    extract_tag(row_buf, "Type", buf, sizeof(buf));
+    extract_tag(row_buf, "Category", buf, sizeof(buf));
     if (buf[0] && !validate_variables_description_value(COL_VARIABLES_DESCRIPTION_TYPE_STRING, buf)) {
       pos = row_end + 6; continue;
     }
