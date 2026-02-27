@@ -30,11 +30,18 @@ static DNSServer dns_server;
 static bool      dns_running = false;
 
 /* ── MQTT ─────────────────────────────────────────────────────────── */
-static WiFiClient  espClient;
-static WiFiClient  espClientAlert;
-PubSubClient       mqtt(espClient);            /* data topic client       */
-PubSubClient       mqtt_alert(espClientAlert); /* alert topic client      */
-static bool        dual_mqtt = false;          /* true when topics differ */
+static WiFiClient       espClient;
+static WiFiClient       espClientAlert;
+PubSubClient            mqtt(espClient);            /* data topic client       */
+PubSubClient            mqtt_alert(espClientAlert); /* alert topic client      */
+static bool             dual_mqtt = false;          /* true when topics differ */
+
+/* Protects all PubSubClient access across cores.
+ * wifi_manager_loop() holds this while calling mqtt.loop() / mqtt_manager_connect().
+ * increment_task and http_task acquire it in the public helpers below.
+ * mqtt_manager_connect() is intentionally NOT re-locking — it is only called
+ * from within the already-locked loop block or from setup() before tasks start. */
+static SemaphoreHandle_t s_mqtt_mutex = nullptr;
 
 /* ── AP portal page — split so scan results can be injected ──── */
 static const char AP_PAGE_TOP[] PROGMEM = R"HTML(<!DOCTYPE html><html>
@@ -154,6 +161,8 @@ static void start_ap_portal(void)
 /* ── Connect to WiFi ──────────────────────────────────────────── */
 bool wifi_manager_init(const char *ssid, const char *password)
 {
+    s_mqtt_mutex = xSemaphoreCreateMutex();
+
     if (!ssid || !ssid[0]) {
         Serial.println("[WiFi] No SSID configured");
         start_ap_portal();   /* never returns */
@@ -216,18 +225,23 @@ void wifi_manager_loop(void)
         dns_server.processNextRequest();
     }
 
-    /* Service keep-alive loops */
-    if (mqtt.connected())                      mqtt.loop();
-    if (dual_mqtt && mqtt_alert.connected())   mqtt_alert.loop();
+    /* Service keep-alive and reconnect — mutex held for entire block so that
+     * increment_task (Core 0) cannot call publish/connected concurrently.
+     * mqtt_manager_connect() is called while the mutex is already held and
+     * must not attempt to re-acquire it. */
+    if (s_mqtt_mutex && xSemaphoreTake(s_mqtt_mutex, portMAX_DELAY) == pdTRUE) {
+        if (mqtt.connected())                      mqtt.loop();
+        if (dual_mqtt && mqtt_alert.connected())   mqtt_alert.loop();
 
-    /* Reconnect any dropped client every 30 s */
-    bool needs_reconnect = !mqtt.connected() || (dual_mqtt && !mqtt_alert.connected());
-    if (needs_reconnect) {
-        static uint32_t last_reconnect = 0;
-        if (millis() - last_reconnect > 30000) {
-            last_reconnect = millis();
-            mqtt_manager_connect();
+        bool needs_reconnect = !mqtt.connected() || (dual_mqtt && !mqtt_alert.connected());
+        if (needs_reconnect) {
+            static uint32_t last_reconnect = 0;
+            if (millis() - last_reconnect > 30000) {
+                last_reconnect = millis();
+                mqtt_manager_connect();
+            }
         }
+        xSemaphoreGive(s_mqtt_mutex);
     }
 }
 
@@ -306,7 +320,13 @@ void mqtt_manager_connect(void)
 /* ── Publish to the data topic ── */
 bool mqtt_manager_publish(const char *topic, const char *payload, bool retain)
 {
-    return mqtt.publish(topic, payload, retain);
+    if (!s_mqtt_mutex) return false;
+    bool ok = false;
+    if (xSemaphoreTake(s_mqtt_mutex, portMAX_DELAY) == pdTRUE) {
+        ok = mqtt.publish(topic, payload, retain);
+        xSemaphoreGive(s_mqtt_mutex);
+    }
+    return ok;
 }
 
 /* ── Publish to the alert topic ──────────────────────────────────
@@ -314,22 +334,40 @@ bool mqtt_manager_publish(const char *topic, const char *payload, bool retain)
  * single mode→ uses data client + whichever topic is configured  */
 bool mqtt_manager_publish_alert(const char *payload, bool retain)
 {
-    if (dual_mqtt) {
-        return mqtt_alert.publish(settings_mqtt.Alert_Topic, payload, retain);
+    if (!s_mqtt_mutex) return false;
+    bool ok = false;
+    if (xSemaphoreTake(s_mqtt_mutex, portMAX_DELAY) == pdTRUE) {
+        if (dual_mqtt) {
+            ok = mqtt_alert.publish(settings_mqtt.Alert_Topic, payload, retain);
+        } else {
+            const char *topic = (settings_mqtt.Data_Topic && settings_mqtt.Data_Topic[0])
+                                ? settings_mqtt.Data_Topic
+                                : settings_mqtt.Alert_Topic;
+            ok = mqtt.publish(topic, payload, retain);
+        }
+        xSemaphoreGive(s_mqtt_mutex);
     }
-    /* Single client: pick whichever topic is set */
-    const char *topic = (settings_mqtt.Data_Topic && settings_mqtt.Data_Topic[0])
-                        ? settings_mqtt.Data_Topic
-                        : settings_mqtt.Alert_Topic;
-    return mqtt.publish(topic, payload, retain);
+    return ok;
 }
 
 bool mqtt_manager_connected(void)
 {
-    return mqtt.connected();
+    if (!s_mqtt_mutex) return false;
+    bool ok = false;
+    if (xSemaphoreTake(s_mqtt_mutex, portMAX_DELAY) == pdTRUE) {
+        ok = mqtt.connected();
+        xSemaphoreGive(s_mqtt_mutex);
+    }
+    return ok;
 }
 
 bool mqtt_manager_connected_alert(void)
 {
-    return dual_mqtt ? mqtt_alert.connected() : mqtt.connected();
+    if (!s_mqtt_mutex) return false;
+    bool ok = false;
+    if (xSemaphoreTake(s_mqtt_mutex, portMAX_DELAY) == pdTRUE) {
+        ok = dual_mqtt ? mqtt_alert.connected() : mqtt.connected();
+        xSemaphoreGive(s_mqtt_mutex);
+    }
+    return ok;
 }
