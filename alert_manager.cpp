@@ -35,6 +35,8 @@ alert_table_t alert_table;
 
 static SemaphoreHandle_t alert_mutex = NULL;
 
+uint32_t alert_log_count = 0;  /* total entries appended to /alert_log.jsonl */
+
 /* ============================================================
  *  UTILITY — current UTC time string
  * ============================================================ */
@@ -74,7 +76,7 @@ void alert_system_init(void)
     configTime(0, 0, "pool.ntp.org", "time.nist.gov");
     Serial.println("[NTP] Sync started (UTC)");
 
-    /* ── 4. Ensure /alert_log.jsonl exists in SPIFFS ── */
+    /* ── 4. Ensure /alert_log.jsonl exists; seed alert_log_count from file ── */
     if (!SPIFFS.exists("/alert_log.jsonl")) {
         File f = SPIFFS.open("/alert_log.jsonl", "w");
         if (f) {
@@ -84,7 +86,17 @@ void alert_system_init(void)
             Serial.println("[Alert] ERROR: could not create /alert_log.jsonl");
         }
     } else {
-        Serial.println("[Alert] /alert_log.jsonl found");
+        /* Count existing newlines so alert_log_count reflects the true total,
+         * not just alerts generated since the last reboot. */
+        File f = SPIFFS.open("/alert_log.jsonl", "r");
+        if (f) {
+            while (f.available()) {
+                if (f.read() == '\n') alert_log_count++;
+            }
+            f.close();
+        }
+        Serial.printf("[Alert] /alert_log.jsonl found (%u existing entries)\n",
+                      alert_log_count);
     }
 }
 
@@ -128,6 +140,7 @@ static void log_alert_ptr(const alert_t *a)
     }
     f.print(line);
     f.close();
+    alert_log_count++;
 
     Serial.printf("[Alert] Logged idx=%u  fault=%.0f  %s/%s  val=%.2f  %s\n",
                   a->alert_idx, a->fault_code,

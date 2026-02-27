@@ -84,6 +84,7 @@ typedef struct {
 } alert_table_t;
 
 extern alert_table_t alert_table;
+extern uint32_t alert_log_count;  /* total entries ever appended to /alert_log.jsonl */
 
 /* ============================================================
  *  INITIALISATION

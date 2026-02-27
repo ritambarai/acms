@@ -276,7 +276,7 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
         /* first constraint for this new variable */
         description_tbl->rows[description_count].constraint_id = _new_cid;
         if (_t_Increment != -9999.0f) {
-          increment_pool.rows[increment_pool.count].Increment = _t_Increment;
+          increment_pool.rows[increment_pool.count].Step = _t_Increment;
           increment_pool.rows[increment_pool.count].ini_val   = description_tbl->rows[description_count].Value;
           increment_pool.rows[increment_pool.count].threshold = _t_Threshold;
           increment_pool.rows[increment_pool.count].value_ptr = &description_tbl->rows[description_count].Value;
@@ -302,11 +302,29 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
       description_count++;
     } else {
       /* ── EXISTING VAR: append constraint to chain; value_ptr → original var's Value ── */
+      if (_t_Slave_ID != -9999.0f || _t_Function_ID != -9999.0f || _t_Start_Address != -9999.0f || _t_Data_Length != -9999.0f) {
+        modbus_tbl->rows[modbus_count].Slave_ID = _t_Slave_ID;
+        modbus_tbl->rows[modbus_count].Function_ID = _t_Function_ID;
+        modbus_tbl->rows[modbus_count].Start_Address = _t_Start_Address;
+        modbus_tbl->rows[modbus_count].Data_Length = _t_Data_Length;
+        modbus_tbl->rows[modbus_count].value_ptr = (float *)var_pool[_var_pool_id].ext_addr;
+        modbus_count++;
+      }
       if (_t_Operation_ID != -9999.0f || _t_Threshold != -9999.0f || _t_Fault_Code != -9999.0f || _t_Increment != -9999.0f) {
+        bool _chain_has_inc = false;
+        if (_t_Increment != -9999.0f) {
+          int _cid_walk = (int)var_pool[_var_pool_id].constraint_idx;
+          while (_cid_walk != -1) {
+            if (constraints_tbl->rows[_cid_walk].Increment != -9999.0f) {
+              _chain_has_inc = true; break;
+            }
+            _cid_walk = constraints_tbl->rows[_cid_walk].constraints_id;
+          }
+        }
         constraints_tbl->rows[constraints_count].Operation_ID = _t_Operation_ID;
         constraints_tbl->rows[constraints_count].Threshold = _t_Threshold;
         constraints_tbl->rows[constraints_count].Fault_Code = _t_Fault_Code;
-        constraints_tbl->rows[constraints_count].Increment = _t_Increment;
+        constraints_tbl->rows[constraints_count].Increment = _chain_has_inc ? -9999.0f : _t_Increment;
         constraints_tbl->rows[constraints_count].value_ptr = (float *)var_pool[_var_pool_id].ext_addr;
         constraints_tbl->rows[constraints_count].constraints_id = -1;
         if (var_pool[_var_pool_id].constraint_idx == INVALID_INDEX) {
@@ -317,14 +335,14 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
             _chain_idx = constraints_tbl->rows[_chain_idx].constraints_id;
           constraints_tbl->rows[_chain_idx].constraints_id = constraints_count;
         }
-        if (_t_Increment != -9999.0f) {
-          increment_pool.rows[increment_pool.count].Increment = _t_Increment;
+        constraints_count++;
+        if (_t_Increment != -9999.0f && !_chain_has_inc) {
+          increment_pool.rows[increment_pool.count].Step      = _t_Increment;
           increment_pool.rows[increment_pool.count].ini_val   = *(float *)var_pool[_var_pool_id].ext_addr;
           increment_pool.rows[increment_pool.count].threshold = _t_Threshold;
           increment_pool.rows[increment_pool.count].value_ptr = (float *)var_pool[_var_pool_id].ext_addr;
           increment_pool.count++;
         }
-        constraints_count++;
       }
     }
 
@@ -408,8 +426,8 @@ static void parse_settings_xml(const char *xml) {
       settings_general.Class_Pool_Size = buf[0] ? (int32_t)strtol(buf, NULL, 10) : 0;
       extract_tag(row_start, "Var_Pool_Size", buf, sizeof(buf));
       settings_general.Var_Pool_Size = buf[0] ? (int32_t)strtol(buf, NULL, 10) : 0;
-      extract_tag(row_start, "Alert_cooldown", buf, sizeof(buf));
-      settings_general.Alert_cooldown = buf[0] ? (float)atof(buf) : 0.0f;
+      extract_tag(row_start, "Alert_Cooldownmins", buf, sizeof(buf));
+      settings_general.Alert_Cooldownmins = buf[0] ? (float)atof(buf) : 0.0f;
     }
 
     /* ── mqtt ── */

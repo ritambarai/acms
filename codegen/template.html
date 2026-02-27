@@ -81,6 +81,27 @@ body {
   gap: 4px;
 }
 
+#alert-strip {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+#alert-count-badge {
+  font-size: 11px;
+  color: #555;
+  white-space: nowrap;
+}
+
+#dl-alerts-btn {
+  font-size: 11px;
+}
+
 .check-label {
   display: flex;
   align-items: center;
@@ -328,6 +349,10 @@ button {
 <body>
 <div class="main-header">
   <h1>ACMS Master Portal</h1>
+  <div id="alert-strip">
+    <button id="dl-alerts-btn" onclick="downloadAlerts()" title="Download alert log">Download Offline Logs</button>
+    %ALERT_COUNT_BLOCK%
+  </div>
   <div id="submit-area">
     <button id="submit-btn" onclick="submitAll()">Submit</button>
     %HEADERS_BLOCK%

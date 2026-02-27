@@ -81,6 +81,27 @@ body {
   gap: 4px;
 }
 
+#alert-strip {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+#alert-count-badge {
+  font-size: 11px;
+  color: #555;
+  white-space: nowrap;
+}
+
+#dl-alerts-btn {
+  font-size: 11px;
+}
+
 .check-label {
   display: flex;
   align-items: center;
@@ -328,6 +349,13 @@ button {
 <body>
 <div class="main-header">
   <h1>ACMS Master Portal</h1>
+  <div id="alert-strip">
+    <button id="dl-alerts-btn" onclick="downloadAlerts()" title="Download alert log">Download Offline Logs</button>
+    <label class="check-label">
+  Alert Count: <span id="alert-count-badge">—</span>
+</label>
+
+  </div>
   <div id="submit-area">
     <button id="submit-btn" onclick="submitAll()">Submit</button>
     <label class="check-label">
@@ -369,8 +397,8 @@ button {
           <span class="error-msg"></span>
         </div>
         <div class="field">
-          <label>Alert cooldown</label>
-          <input placeholder="float" data-type="float" data-name="Alert_cooldown" oninput="validateField(this); settingsChanged()">
+          <label>Alert Cooldown(mins)</label>
+          <input placeholder="float" data-type="float" data-name="Alert_Cooldown(mins)" oninput="validateField(this); settingsChanged()">
           <span class="error-msg"></span>
         </div>
       </div>
@@ -623,21 +651,21 @@ var Variables_SCHEMA = [
 var TABLE_LIST = ["Metadata", "Variables"];
 
 var Settings_SUBCATS = {
-  "general": ["SSID", "Password", "Class_Pool_Size", "Var_Pool_Size", "Alert_cooldown"],
+  "general": ["SSID", "Password", "Class_Pool_Size", "Var_Pool_Size", "Alert_Cooldown(mins)"],
   "mqtt": ["Host", "Port", "Data_Topic", "Alert_Topic", "Mqtt_Username", "Mqtt_Password"],
   "json includes": ["Metadata", "Constraints", "Type_Unit"]
 };
-var Settings_TABLE_COLS = ["SSID", "Password", "Class_Pool_Size", "Var_Pool_Size", "Alert_cooldown", "Host", "Port", "Data_Topic", "Alert_Topic", "Mqtt_Username", "Mqtt_Password", "Metadata", "Constraints", "Type_Unit"];
+var Settings_TABLE_COLS = ["SSID", "Password", "Class_Pool_Size", "Var_Pool_Size", "Alert_Cooldown(mins)", "Host", "Port", "Data_Topic", "Alert_Topic", "Mqtt_Username", "Mqtt_Password", "Metadata", "Constraints", "Type_Unit"];
 
 
 /* ======== PRELOADED XML (embedded at build time) ======== */
 var PRELOAD_XML = {
-  "Metadata": "<Metadata>\n<row><Class>Fault_Code</Class><Key>101</Key><Message>Fault</Message></row>\n<row><Class>Fault_Code</Class><Key>201</Key><Message>Low Level</Message></row>\n<row><Class>Fault_Code</Class><Key>301</Key><Message>Over Voltage</Message></row>\n<row><Class>Fault_Code</Class><Key>302</Key><Message>Under Voltage</Message></row>\n<row><Class>Fault_Code</Class><Key>401</Key><Message>Low Pressure</Message></row>\n<row><Class>Fault_Code</Class><Key>402</Key><Message>High Pressure</Message></row>\n<row><Class>level</Class><Key>1</Key><Message>Percentage(%)</Message></row>\n<row><Class>level</Class><Key>2</Key><Message>meter</Message></row>\n<row><Class>mode</Class><Key>0</Key><Message>AUTO</Message></row>\n<row><Class>mode</Class><Key>1</Key><Message>MANUAL</Message></row>\n<row><Class>Operation_ID</Class><Key>0</Key><Message>Equals to</Message></row>\n<row><Class>Operation_ID</Class><Key>1</Key><Message>Less than</Message></row>\n<row><Class>Operation_ID</Class><Key>2</Key><Message>Greater than</Message></row>\n<row><Class>Operation_ID</Class><Key>3</Key><Message>Greater than/ Equals to</Message></row>\n<row><Class>Operation_ID</Class><Key>4</Key><Message>Less than/ Equals to</Message></row>\n<row><Class>Operation_ID</Class><Key>5</Key><Message>Not Equals to</Message></row>\n<row><Class>pressure</Class><Key>1</Key><Message>bar</Message></row>\n<row><Class>status</Class><Key>0</Key><Message>OFF</Message></row>\n<row><Class>status</Class><Key>1</Key><Message>ON</Message></row>\n<row><Class>trip</Class><Key>0</Key><Message>FALSE</Message></row>\n<row><Class>trip</Class><Key>1</Key><Message>TRUE</Message></row>\n<row><Class>type</Class><Key>0</Key><Message>choice</Message></row>\n<row><Class>type</Class><Key>1</Key><Message>numeric</Message></row>\n<row><Class>voltage</Class><Key>1</Key><Message>Volts(V)</Message></row>\n</Metadata>",
-  "Variables": "<Variables>\n<row><Class>diesel tanks</Class><Name>level</Name><Type>type</Type><Value>1</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>diesel tanks</Class><Name>level</Name><Type>unit</Type><Value>1</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>diesel tanks</Class><Name>level</Name><Type>main</Type><Value>50</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>4</Operation_ID><Threshold>10</Threshold><Fault_Code>201</Fault_Code><Increment/></row>\n<row><Class>pipes</Class><Name>pressure</Name><Type>type</Type><Value>1</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pipes</Class><Name>pressure</Name><Type>unit</Type><Value>1</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pipes</Class><Name>pressure</Name><Type>booster</Type><Value>5</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>1</Operation_ID><Threshold>1</Threshold><Fault_Code>401</Fault_Code><Increment/></row>\n<row><Class>pipes</Class><Name>pressure</Name><Type>fire hose</Type><Value>5</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>1</Operation_ID><Threshold>1</Threshold><Fault_Code>401</Fault_Code><Increment/></row>\n<row><Class>pipes</Class><Name>pressure</Name><Type>hydrant</Type><Value>5</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>1</Operation_ID><Threshold>1</Threshold><Fault_Code>401</Fault_Code><Increment/></row>\n<row><Class>pipes</Class><Name>pressure</Name><Type>main line</Type><Value>5</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>1</Operation_ID><Threshold>1</Threshold><Fault_Code>401</Fault_Code><Increment/></row>\n<row><Class>pipes</Class><Name>pressure</Name><Type>sprinkler</Type><Value>5</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>1</Operation_ID><Threshold>1</Threshold><Fault_Code>401</Fault_Code><Increment/></row>\n<row><Class>pipes</Class><Name>pressure</Name><Type>stand pipe</Type><Value>5</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>1</Operation_ID><Threshold>1</Threshold><Fault_Code>401</Fault_Code><Increment/></row>\n<row><Class>pumps</Class><Name>mode</Name><Type>type</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>mode</Name><Type>booster</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>mode</Name><Type>diesel</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>mode</Name><Type>jockey</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>mode</Name><Type>main</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>status</Name><Type>type</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>status</Name><Type>booster</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>status</Name><Type>diesel</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>status</Name><Type>jockey</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>status</Name><Type>main</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>trip</Name><Type>type</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>trip</Name><Type>booster</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>0</Operation_ID><Threshold>1</Threshold><Fault_Code>101</Fault_Code><Increment/></row>\n<row><Class>pumps</Class><Name>trip</Name><Type>diesel</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>0</Operation_ID><Threshold>1</Threshold><Fault_Code>101</Fault_Code><Increment/></row>\n<row><Class>pumps</Class><Name>trip</Name><Type>jockey</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>0</Operation_ID><Threshold>1</Threshold><Fault_Code>101</Fault_Code><Increment/></row>\n<row><Class>pumps</Class><Name>trip</Name><Type>main</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>0</Operation_ID><Threshold>1</Threshold><Fault_Code>101</Fault_Code><Increment/></row>\n<row><Class>pumps</Class><Name>voltage</Name><Type>type</Type><Value>1</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>voltage</Name><Type>unit</Type><Value>1</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>voltage</Name><Type>diesel</Type><Value>240</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>2</Operation_ID><Threshold>270</Threshold><Fault_Code>301</Fault_Code><Increment/></row>\n<row><Class>pumps</Class><Name>voltage</Name><Type>diesel</Type><Value>240</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>1</Operation_ID><Threshold>200</Threshold><Fault_Code>302</Fault_Code><Increment/></row>\n<row><Class>pumps</Class><Name>voltage</Name><Type>jockey</Type><Value>240</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>2</Operation_ID><Threshold>270</Threshold><Fault_Code>301</Fault_Code><Increment/></row>\n<row><Class>pumps</Class><Name>voltage</Name><Type>jockey</Type><Value>240</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>1</Operation_ID><Threshold>200</Threshold><Fault_Code>302</Fault_Code><Increment/></row>\n<row><Class>pumps</Class><Name>voltage</Name><Type>main</Type><Value>240</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>2</Operation_ID><Threshold>270</Threshold><Fault_Code>301</Fault_Code><Increment/></row>\n<row><Class>pumps</Class><Name>voltage</Name><Type>main</Type><Value>240</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>1</Operation_ID><Threshold>200</Threshold><Fault_Code>302</Fault_Code><Increment/></row>\n<row><Class>water tanks</Class><Name>level</Name><Type>type</Type><Value>1</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>water tanks</Class><Name>level</Name><Type>unit</Type><Value>1</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>water tanks</Class><Name>level</Name><Type>Overground A</Type><Value>50</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>4</Operation_ID><Threshold>10</Threshold><Fault_Code>201</Fault_Code><Increment/></row>\n<row><Class>water tanks</Class><Name>level</Name><Type>Overground B</Type><Value>50</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>4</Operation_ID><Threshold>10</Threshold><Fault_Code>201</Fault_Code><Increment/></row>\n<row><Class>water tanks</Class><Name>level</Name><Type>Underground A</Type><Value>50</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>4</Operation_ID><Threshold>10</Threshold><Fault_Code>201</Fault_Code><Increment/></row>\n<row><Class>water tanks</Class><Name>level</Name><Type>Underground B</Type><Value>50</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>4</Operation_ID><Threshold>10</Threshold><Fault_Code>201</Fault_Code><Increment/></row>\n</Variables>"
+  "Metadata": "<Metadata>\n<row><Class>Fault_Code</Class><Key>101</Key><Message>Fault</Message></row>\n<row><Class>Fault_Code</Class><Key>201</Key><Message>Low Level</Message></row>\n<row><Class>Fault_Code</Class><Key>301</Key><Message>Over Voltage</Message></row>\n<row><Class>Fault_Code</Class><Key>302</Key><Message>Under Voltage</Message></row>\n<row><Class>Fault_Code</Class><Key>401</Key><Message>Low Pressure</Message></row>\n<row><Class>Fault_Code</Class><Key>402</Key><Message>High Pressure</Message></row>\n<row><Class>Function_ID</Class><Key>1</Key><Message>Coils</Message></row>\n<row><Class>Function_ID</Class><Key>2</Key><Message>Discrete Inputs</Message></row>\n<row><Class>Function_ID</Class><Key>3</Key><Message>Holding Registers</Message></row>\n<row><Class>Function_ID</Class><Key>4</Key><Message>Input Registers</Message></row>\n<row><Class>level</Class><Key>1</Key><Message>Percentage</Message></row>\n<row><Class>level</Class><Key>2</Key><Message>meter</Message></row>\n<row><Class>mode</Class><Key>0</Key><Message>AUTO</Message></row>\n<row><Class>mode</Class><Key>1</Key><Message>MANUAL</Message></row>\n<row><Class>Operation_ID</Class><Key>0</Key><Message>Equals to</Message></row>\n<row><Class>Operation_ID</Class><Key>1</Key><Message>Less than</Message></row>\n<row><Class>Operation_ID</Class><Key>2</Key><Message>Greater than</Message></row>\n<row><Class>Operation_ID</Class><Key>3</Key><Message>Greater than/ Equals to</Message></row>\n<row><Class>Operation_ID</Class><Key>4</Key><Message>Less than/ Equals to</Message></row>\n<row><Class>Operation_ID</Class><Key>5</Key><Message>Not Equals to</Message></row>\n<row><Class>pressure</Class><Key>1</Key><Message>bar</Message></row>\n<row><Class>state</Class><Key>0</Key><Message>OFF</Message></row>\n<row><Class>state</Class><Key>1</Key><Message>ON</Message></row>\n<row><Class>status</Class><Key>0</Key><Message>OK</Message></row>\n<row><Class>status</Class><Key>1</Key><Message>FAULT</Message></row>\n<row><Class>trip</Class><Key>0</Key><Message>FALSE</Message></row>\n<row><Class>trip</Class><Key>1</Key><Message>TRUE</Message></row>\n<row><Class>type</Class><Key>0</Key><Message>choice</Message></row>\n<row><Class>type</Class><Key>1</Key><Message>numeric</Message></row>\n<row><Class>voltage</Class><Key>1</Key><Message>Volts</Message></row>\n</Metadata>",
+  "Variables": "<Variables>\n<row><Class>air pressure switch</Class><Name>status</Name><Type>type</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>air pressure switch</Class><Name>status</Name><Type>First Floor</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>0</Operation_ID><Threshold>1</Threshold><Fault_Code>101</Fault_Code><Increment/></row>\n<row><Class>air pressure switch</Class><Name>status</Name><Type>Fourth Floor</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>0</Operation_ID><Threshold>1</Threshold><Fault_Code>101</Fault_Code><Increment/></row>\n<row><Class>air pressure switch</Class><Name>status</Name><Type>Ground Floor</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>0</Operation_ID><Threshold>1</Threshold><Fault_Code>101</Fault_Code><Increment/></row>\n<row><Class>air pressure switch</Class><Name>status</Name><Type>Second Floor</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>0</Operation_ID><Threshold>1</Threshold><Fault_Code>101</Fault_Code><Increment/></row>\n<row><Class>air pressure switch</Class><Name>status</Name><Type>Third Floor</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>0</Operation_ID><Threshold>1</Threshold><Fault_Code>101</Fault_Code><Increment>0</Increment></row>\n<row><Class>diesel tanks</Class><Name>level</Name><Type>type</Type><Value>1</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>diesel tanks</Class><Name>level</Name><Type>unit</Type><Value>1</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>diesel tanks</Class><Name>level</Name><Type>main</Type><Value>50</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>4</Operation_ID><Threshold>10</Threshold><Fault_Code>201</Fault_Code><Increment/></row>\n<row><Class>manual call point</Class><Name>status</Name><Type>type</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>manual call point</Class><Name>status</Name><Type>First Floor</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>0</Operation_ID><Threshold>1</Threshold><Fault_Code>101</Fault_Code><Increment>0</Increment></row>\n<row><Class>manual call point</Class><Name>status</Name><Type>Fourth Floor</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>0</Operation_ID><Threshold>1</Threshold><Fault_Code>101</Fault_Code><Increment>0</Increment></row>\n<row><Class>manual call point</Class><Name>status</Name><Type>Ground Floor</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>0</Operation_ID><Threshold>1</Threshold><Fault_Code>101</Fault_Code><Increment>0</Increment></row>\n<row><Class>manual call point</Class><Name>status</Name><Type>Second Floor</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>0</Operation_ID><Threshold>1</Threshold><Fault_Code>101</Fault_Code><Increment>1</Increment></row>\n<row><Class>manual call point</Class><Name>status</Name><Type>Third Floor</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>0</Operation_ID><Threshold>1</Threshold><Fault_Code>101</Fault_Code><Increment>1</Increment></row>\n<row><Class>pipes</Class><Name>pressure</Name><Type>type</Type><Value>1</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pipes</Class><Name>pressure</Name><Type>unit</Type><Value>1</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pipes</Class><Name>pressure</Name><Type>booster</Type><Value>5</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>1</Operation_ID><Threshold>1</Threshold><Fault_Code>401</Fault_Code><Increment/></row>\n<row><Class>pipes</Class><Name>pressure</Name><Type>fire hose</Type><Value>5</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>1</Operation_ID><Threshold>1</Threshold><Fault_Code>401</Fault_Code><Increment/></row>\n<row><Class>pipes</Class><Name>pressure</Name><Type>hydrant</Type><Value>5</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>1</Operation_ID><Threshold>1</Threshold><Fault_Code>401</Fault_Code><Increment/></row>\n<row><Class>pipes</Class><Name>pressure</Name><Type>main line</Type><Value>5</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>1</Operation_ID><Threshold>1</Threshold><Fault_Code>401</Fault_Code><Increment/></row>\n<row><Class>pipes</Class><Name>pressure</Name><Type>sprinkler</Type><Value>5</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>1</Operation_ID><Threshold>1</Threshold><Fault_Code>401</Fault_Code><Increment/></row>\n<row><Class>pipes</Class><Name>pressure</Name><Type>stand pipe</Type><Value>5</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>1</Operation_ID><Threshold>1</Threshold><Fault_Code>401</Fault_Code><Increment/></row>\n<row><Class>pumps</Class><Name>mode</Name><Type>type</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>mode</Name><Type>booster</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>mode</Name><Type>diesel</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>mode</Name><Type>jockey</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>mode</Name><Type>main</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>state</Name><Type>type</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>state</Name><Type>booster</Type><Value>1</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment>0</Increment></row>\n<row><Class>pumps</Class><Name>state</Name><Type>diesel</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment>0</Increment></row>\n<row><Class>pumps</Class><Name>state</Name><Type>jockey</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment>1</Increment></row>\n<row><Class>pumps</Class><Name>state</Name><Type>main</Type><Value>1</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment>0</Increment></row>\n<row><Class>pumps</Class><Name>trip</Name><Type>type</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>trip</Name><Type>booster</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>0</Operation_ID><Threshold>1</Threshold><Fault_Code>101</Fault_Code><Increment/></row>\n<row><Class>pumps</Class><Name>trip</Name><Type>diesel</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>0</Operation_ID><Threshold>1</Threshold><Fault_Code>101</Fault_Code><Increment/></row>\n<row><Class>pumps</Class><Name>trip</Name><Type>jockey</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>0</Operation_ID><Threshold>1</Threshold><Fault_Code>101</Fault_Code><Increment/></row>\n<row><Class>pumps</Class><Name>trip</Name><Type>main</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>0</Operation_ID><Threshold>1</Threshold><Fault_Code>101</Fault_Code><Increment/></row>\n<row><Class>pumps</Class><Name>voltage</Name><Type>type</Type><Value>1</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>voltage</Name><Type>unit</Type><Value>1</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>pumps</Class><Name>voltage</Name><Type>booster</Type><Value>240</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>1</Operation_ID><Threshold>200</Threshold><Fault_Code>302</Fault_Code><Increment/></row>\n<row><Class>pumps</Class><Name>voltage</Name><Type>booster</Type><Value>240</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>2</Operation_ID><Threshold>270</Threshold><Fault_Code>301</Fault_Code><Increment>-2</Increment></row>\n<row><Class>pumps</Class><Name>voltage</Name><Type>diesel</Type><Value>240</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>2</Operation_ID><Threshold>270</Threshold><Fault_Code>301</Fault_Code><Increment>-0.5</Increment></row>\n<row><Class>pumps</Class><Name>voltage</Name><Type>diesel</Type><Value>240</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>1</Operation_ID><Threshold>200</Threshold><Fault_Code>302</Fault_Code><Increment/></row>\n<row><Class>pumps</Class><Name>voltage</Name><Type>jockey</Type><Value>240</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>2</Operation_ID><Threshold>270</Threshold><Fault_Code>301</Fault_Code><Increment/></row>\n<row><Class>pumps</Class><Name>voltage</Name><Type>jockey</Type><Value>240</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>1</Operation_ID><Threshold>200</Threshold><Fault_Code>302</Fault_Code><Increment/></row>\n<row><Class>pumps</Class><Name>voltage</Name><Type>main</Type><Value>240</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>2</Operation_ID><Threshold>270</Threshold><Fault_Code>301</Fault_Code><Increment/></row>\n<row><Class>pumps</Class><Name>voltage</Name><Type>main</Type><Value>240</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>1</Operation_ID><Threshold>200</Threshold><Fault_Code>302</Fault_Code><Increment/></row>\n<row><Class>repeater panel</Class><Name>status</Name><Type>type</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>repeater panel</Class><Name>status</Name><Type>First Floor</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>0</Operation_ID><Threshold>1</Threshold><Fault_Code>101</Fault_Code><Increment/></row>\n<row><Class>repeater panel</Class><Name>status</Name><Type>Fourth Floor</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>0</Operation_ID><Threshold>1</Threshold><Fault_Code>101</Fault_Code><Increment/></row>\n<row><Class>repeater panel</Class><Name>status</Name><Type>Ground Floor</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>0</Operation_ID><Threshold>1</Threshold><Fault_Code>101</Fault_Code><Increment/></row>\n<row><Class>repeater panel</Class><Name>status</Name><Type>Second Floor</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>0</Operation_ID><Threshold>1</Threshold><Fault_Code>101</Fault_Code><Increment>1</Increment></row>\n<row><Class>repeater panel</Class><Name>status</Name><Type>Third Floor</Type><Value>0</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>0</Operation_ID><Threshold>1</Threshold><Fault_Code>101</Fault_Code><Increment/></row>\n<row><Class>ups battery</Class><Name>voltage</Name><Type>type</Type><Value>1</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>ups battery</Class><Name>voltage</Name><Type>unit</Type><Value>1</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>ups battery</Class><Name>voltage</Name><Type>main</Type><Value>240</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>1</Operation_ID><Threshold>200</Threshold><Fault_Code>302</Fault_Code><Increment>-0.5</Increment></row>\n<row><Class>water tanks</Class><Name>level</Name><Type>type</Type><Value>1</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>water tanks</Class><Name>level</Name><Type>unit</Type><Value>1</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID/><Threshold/><Fault_Code/><Increment/></row>\n<row><Class>water tanks</Class><Name>level</Name><Type>Overground A</Type><Value>50</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>4</Operation_ID><Threshold>10</Threshold><Fault_Code>201</Fault_Code><Increment/></row>\n<row><Class>water tanks</Class><Name>level</Name><Type>Overground B</Type><Value>50</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>4</Operation_ID><Threshold>10</Threshold><Fault_Code>201</Fault_Code><Increment/></row>\n<row><Class>water tanks</Class><Name>level</Name><Type>Underground A</Type><Value>50</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>4</Operation_ID><Threshold>10</Threshold><Fault_Code>201</Fault_Code><Increment/></row>\n<row><Class>water tanks</Class><Name>level</Name><Type>Underground B</Type><Value>50</Value><Slave_ID/><Function_ID/><Start_Address/><Data_Length/><Operation_ID>4</Operation_ID><Threshold>10</Threshold><Fault_Code>201</Fault_Code><Increment/></row>\n</Variables>"
 };
 
 /* ======== PRELOADED SETTINGS (embedded at build time, PC only) ======== */
-var PRELOAD_SETTINGS = "<Settings>\n  <row><general><SSID>Ritam iPhone</SSID><Password>password</Password><Class_Pool_Size>32</Class_Pool_Size><Var_Pool_Size>128</Var_Pool_Size></general></row>\n  <row><mqtt><Host>mqtt-server.ddns.net</Host><Port>1883</Port><Data_Topic>ACMS_Rey/01/</Data_Topic><Alert_Topic>ACMS_Rey/01/</Alert_Topic><Mqtt_Username></Mqtt_Username><Mqtt_Password></Mqtt_Password></mqtt></row>\n  <row><json_includes><Metadata>true</Metadata><Constraints>false</Constraints><Type_Unit>true</Type_Unit></json_includes></row>\n</Settings>";
+var PRELOAD_SETTINGS = "<Settings>\n  <row><general><SSID>Airtel_kaus_0496</SSID><Password>air68987</Password><Class_Pool_Size>32</Class_Pool_Size><Var_Pool_Size>128</Var_Pool_Size><Alert_Cooldown(mins)></Alert_Cooldown(mins)></general></row>\n  <row><mqtt><Host>mqtt-server.ddns.net</Host><Port>1883</Port><Data_Topic>ACMS_Rey/01/</Data_Topic><Alert_Topic>ACMS_Rey/02/</Alert_Topic><Mqtt_Username></Mqtt_Username><Mqtt_Password></Mqtt_Password></mqtt></row>\n  <row><json_includes><Metadata>true</Metadata><Constraints>false</Constraints><Type_Unit>true</Type_Unit></json_includes></row>\n</Settings>";
 
 /* ======== STABLE JS LOGIC (INJECTED FROM CODEGEN) ======== */
 /* ======== STABLE JS LOGIC ======== */
@@ -658,30 +686,30 @@ window.addEventListener("DOMContentLoaded", () => {
 
   document.documentElement.style.setProperty("--field-width", FIELD_WIDTH);
 
-  /* Initialize each table; call logStateTables() once all are loaded */
-  let _tablesLoaded = 0;
-  function _onTableLoaded() {
-    if (++_tablesLoaded === TABLE_LIST.length) logStateTables();
-  }
-
-  TABLE_LIST.forEach(table => {
-
+  /* Initialize tables sequentially: each fetch completes before the next
+   * starts, so the ESP's single-threaded WebServer is never hit with
+   * concurrent requests.  On PC, PRELOAD_XML always has data so every
+   * step is synchronous and the queue drains instantly. */
+  const _queue = TABLE_LIST.slice();
+  function _loadNext() {
+    if (_queue.length === 0) {
+      logStateTables();
+      state["Settings"] = {};
+      loadSettings();
+      return;
+    }
+    const table = _queue.shift();
     const schema = window[table + "_SCHEMA"];
     state[table] = [];
-
     buildForm(table);
-
-    /* load from embedded XML (PC) or fetch from SPIFFS (ESP) */
     if (PRELOAD_XML[table]) {
       parseXML(PRELOAD_XML[table], table, schema);
-      _onTableLoaded();
+      _loadNext();
     } else {
-      loadTable(table, schema, _onTableLoaded);
+      loadTable(table, schema, _loadNext);
     }
-  });
-
-  state["Settings"] = {};
-  loadSettings();
+  }
+  _loadNext();
 
 });
 
@@ -781,8 +809,83 @@ function renderTable(table, schema) {
       _cmp(a[ti] ?? "", b[ti] ?? ""));
   }
 
+  /* ── Row-group colouring ──────────────────────────────────────────────
+   * Variables : group key = (Class, Name)  — all Type/Unit/Constraint rows
+   *             for the same variable share one base colour; rows whose
+   *             Type column equals "type" or "unit" get a darker, more
+   *             saturated variant of that base colour.
+   * Metadata  : group key = (Class) only  — all rows in the same class share.
+   * Other     : group key = (Class) if present, else no colouring.
+   * Palette is ordered warmest → coolest (reds→oranges→yellows→greens→blues→purples).
+   * ─────────────────────────────────────────────────────────────────── */
+  const _GROUP_PALETTE = [
+    "#F4F7E4",  /* pale olive     */  "#E6F4DF",  /* soft green      */
+    "#ECFAEE",  /* leafy green    */  "#E4F9EE",  /* mint            */
+    "#D0F4F2",  /* aqua           */  "#E8F4F9",  /* powder blue     */
+    "#DEF0FF",  /* sky blue       */  "#EBF2FF",  /* light cornflower*/
+    "#E6DAEE",  /* dusty purple   */  "#F2E0FC",  /* lavender        */
+    "#FBEBF0",  /* muted pink     */  "#FFE5EA",  /* rose            */
+    "#FDE2D5",  /* coral pastel   */  "#FFEBD2",  /* soft peach      */
+    "#FFF2DA",  /* apricot        */  "#FBF3E1"   /* warm sand       */
+  ];
+
+  /* Darken by ~18 % lightness and boost saturation by ~20 % (HSL space). */
+  function _darkenSaturate(hex) {
+    const r = parseInt(hex.slice(1,3),16)/255;
+    const g = parseInt(hex.slice(3,5),16)/255;
+    const b = parseInt(hex.slice(5,7),16)/255;
+    const max = Math.max(r,g,b), min = Math.min(r,g,b), d = max - min;
+    const l = (max + min) / 2;
+    const s = d === 0 ? 0 : d / (1 - Math.abs(2*l - 1));
+    let h = 0;
+    if (d !== 0) {
+      if      (max === r) h = ((g - b) / d + 6) % 6;
+      else if (max === g) h = (b - r) / d + 2;
+      else                h = (r - g) / d + 4;
+      h /= 6;
+    }
+    const nl = Math.max(0, l - 0.06);
+    const ns = Math.min(1, s + 0.08);
+    function _h2r(p, q, t) {
+      if (t < 0) t += 1; if (t > 1) t -= 1;
+      if (t < 1/6) return p + (q - p) * 6 * t;
+      if (t < 1/2) return q;
+      if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+      return p;
+    }
+    let rn, gn, bn;
+    if (ns === 0) { rn = gn = bn = nl; } else {
+      const q = nl < 0.5 ? nl * (1 + ns) : nl + ns - nl * ns;
+      const p = 2 * nl - q;
+      rn = _h2r(p, q, h + 1/3);
+      gn = _h2r(p, q, h);
+      bn = _h2r(p, q, h - 1/3);
+    }
+    const th = v => Math.round(v * 255).toString(16).padStart(2, "0");
+    return "#" + th(rn) + th(gn) + th(bn);
+  }
+
+  const _gci = schema.findIndex(f => f.name === "Class");
+  const _gni = (table === "Variables") ? schema.findIndex(f => f.name === "Name") : -1;
+  const _gti = (table === "Variables") ? schema.findIndex(f => f.name === "Type") : -1;
+  function _groupKey(r) {
+    const cls = _gci >= 0 ? (r[_gci] ?? "") : "";
+    const nam = _gni >= 0 ? (r[_gni] ?? "") : "";
+    return cls + "\x00" + nam;
+  }
+  const _gcMap = {};
+  let _gcIdx = 0;
+  state[table].forEach(r => {
+    const k = _groupKey(r);
+    if (!(k in _gcMap)) _gcMap[k] = _GROUP_PALETTE[_gcIdx++ % _GROUP_PALETTE.length];
+  });
+
   state[table].forEach((r, i) => {
-    let tr = `<tr><td class="row-actions-left">` +
+    const _bgBase = _gcMap[_groupKey(r)] ?? "";
+    const _typeVal = _gti >= 0 ? String(r[_gti] ?? "").toLowerCase() : "";
+    const _isTypeUnit = _typeVal === "type" || _typeVal === "unit";
+    const _bgCol = (_bgBase && _isTypeUnit) ? _darkenSaturate(_bgBase) : _bgBase;
+    let tr = `<tr style="background-color:${_bgCol}"><td class="row-actions-left">` +
              `<span class="copy-row" onclick="copyRow('${table}',${i})" title="Copy to form">&#x2398;</span>` +
              `</td>`;
     r.forEach(v => { tr += `<td>${v ?? ""}</td>`; });
@@ -914,6 +1017,34 @@ function loadTable(table, schema, onDone) {
     .then(r => { if (r.ok) return r.text(); throw new Error("HTTP " + r.status); })
     .then(xml => { parseXML(xml, table, schema); if (onDone) onDone(); })
     .catch(e => { console.error("[ACMS] Failed to load " + table + ".xml:", e); if (onDone) onDone(); });
+}
+
+
+/* ---------- ALERT COUNT BADGE + DOWNLOAD ---------- */
+(function() {
+  const badge = document.getElementById("alert-count-badge");
+
+  /* Only poll on real ESP — skip on local-file mode (no server) */
+  if (location.hostname === "") return;
+
+  function fetchAlertCount() {
+    fetch("/alert_count")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d !== null && badge) badge.textContent = d.count; })
+      .catch(() => {});
+  }
+
+  fetchAlertCount();
+  setInterval(fetchAlertCount, 5000);
+})();
+
+function downloadAlerts() {
+  const a = document.createElement("a");
+  a.href = "/alert_log.jsonl";
+  a.download = "alert_log.jsonl";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
 
 
@@ -1219,11 +1350,9 @@ async function submitAll() {
     try {
       for (const t of TABLE_LIST) {
         const xml = rowsToXML(t, window[t + "_SCHEMA"]);
-        const r = await fetch("/" + t + ".xml", {
-          method: "POST",
-          headers: { "Content-Type": "application/xml" },
-          body: xml
-        });
+        const fd = new FormData();
+        fd.append("file", new Blob([xml], {type: "application/xml"}), t + ".xml");
+        const r = await fetch("/" + t + ".xml", { method: "POST", body: fd });
         if (!r.ok) throw new Error(t + " save failed (" + r.status + ")");
       }
 
@@ -1244,7 +1373,11 @@ async function submitAll() {
         if (!r.ok) throw new Error("Settings save failed (" + r.status + ")");
       }
 
-      if (dlChecked) downloadZIP();
+      if (dlChecked) {
+        downloadZIP();
+        /* Let the browser commit the blob download before the page tears down */
+        await new Promise(r => setTimeout(r, 1500));
+      }
 
       await fetch("/reboot", { method: "POST" }).catch(() => {});
       await waitForReboot(btn);
