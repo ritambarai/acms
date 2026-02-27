@@ -6,12 +6,6 @@ import sys
 
 XSD_NS = "{http://www.w3.org/2001/XMLSchema}"
 
-# Field name aliases: maps XSD element name → canonical name used everywhere in
-# generated C structs, enums, and JS schema.  The reverse map (XML_FIELD_NAMES)
-# is used when generating extract_tag() calls so the C parser still finds the
-# correct XML tag in the actual data files.
-FIELD_ALIASES   = {"Category": "Type"}
-XML_FIELD_NAMES = {v: k for k, v in FIELD_ALIASES.items()}
 MAX_ROWS = 128
 
 # Must match hashmap.h defines — single source of truth for Settings field max values
@@ -90,10 +84,10 @@ def parse_xsd(xsd_path):
 
         for child in row_seq.findall(XSD_NS + "element"):
             if "type" in child.attrib:
-                # Direct field (no subcategory)
+                # Direct field (no subcategory) — keep original XSD name
                 raw = child.attrib["name"]
                 fields.append((
-                    FIELD_ALIASES.get(raw, raw),
+                    raw,
                     child.attrib["type"].split(":")[1]
                 ))
             else:
@@ -120,7 +114,7 @@ def parse_xsd(xsd_path):
                                     if inn_seq is not None:
                                         for sf in inn_seq.findall(XSD_NS + "element"):
                                             if "type" in sf.attrib:
-                                                fname = FIELD_ALIASES.get(sf.attrib["name"], sf.attrib["name"])
+                                                fname = sf.attrib["name"]
                                                 ftyp = sf.attrib["type"].split(":")[1]
                                                 fields.append((fname, ftyp))
                                                 inner_field_names.append(fname)
@@ -132,7 +126,7 @@ def parse_xsd(xsd_path):
                             # Flat subcategory with direct typed fields
                             for sf in inner_elements:
                                 if "type" in sf.attrib:
-                                    name = FIELD_ALIASES.get(sf.attrib["name"], sf.attrib["name"])
+                                    name = sf.attrib["name"]
                                     typ = sf.attrib["type"].split(":")[1]
                                     fields.append((name, typ))
                                     subcat_field_names.append(name)
@@ -296,7 +290,7 @@ def gen_table_blocks(tables, validity_field_names=None, subcategories=None, hidd
 """
 
         def _render_field(n, typ):
-            if n in validity_field_names and n != "Type":
+            if n in validity_field_names and n != "Category":
                 if n == "Name":
                     oninput = "validateValidityField(this)"
                     extra = f' data-field="{n}"'
@@ -311,7 +305,7 @@ def gen_table_blocks(tables, validity_field_names=None, subcategories=None, hidd
                     "if(ni) validateValidityField(ni)"
                 )
                 extra = ""
-            elif n == "Type" and ("Value" in validity_field_names or "Name" in validity_field_names):
+            elif n == "Category" and ("Value" in validity_field_names or "Name" in validity_field_names):
                 triggers = ["validateField(this)"]
                 if "Value" in validity_field_names:
                     triggers.append(
@@ -417,7 +411,7 @@ def gen_validity_js():
         "  for (var i = 0; i < schema.length; i++) {\n"
         '    if (schema[i].name === "Class") classIdx = i;\n'
         '    else if (schema[i].name === "Name") nameIdx = i;\n'
-        '    else if (schema[i].name === "Type") typeIdx = i;\n'
+        '    else if (schema[i].name === "Category") typeIdx = i;\n'
         "  }\n"
         "  if (classIdx < 0 || nameIdx < 0 || typeIdx < 0) return dict;\n"
         '  state["Variables"].forEach(function(row) {\n'
@@ -445,7 +439,7 @@ def gen_validity_js():
         "  opts = opts || [\"type\", \"unit\"];\n"
         '  var form = nameInput.closest(\'[id$="_form"]\');\n'
         "  if (!form) return;\n"
-        '  var typeEl = form.querySelector(\'[data-name="Type"]\');\n'
+        '  var typeEl = form.querySelector(\'[data-name="Category"]\');\n'
         "  if (!typeEl) return;\n"
         "  var isSelect = typeEl.tagName === \"SELECT\";\n"
         "  if (asDropdown && isSelect) {\n"
@@ -460,7 +454,7 @@ def gen_validity_js():
         "  var savedType  = typeEl.dataset.type  || \"string\";\n"
         "  if (asDropdown) {\n"
         "    var sel = document.createElement(\"select\");\n"
-        "    sel.dataset.name = \"Type\";\n"
+        "    sel.dataset.name = \"Category\";\n"
         "    sel.dataset.type = savedType;\n"
         "    sel.dataset.opts = opts.slice().sort().join(\",\");\n"
         "    var emptyOpt = document.createElement(\"option\");\n"
@@ -481,7 +475,7 @@ def gen_validity_js():
         "    parent.replaceChild(sel, typeEl);\n"
         "  } else {\n"
         "    var inp = document.createElement(\"input\");\n"
-        "    inp.dataset.name = \"Type\";\n"
+        "    inp.dataset.name = \"Category\";\n"
         "    inp.dataset.type = savedType;\n"
         "    inp.placeholder = savedType;\n"
         "    if (savedField) inp.dataset.field = savedField;\n"
@@ -537,7 +531,7 @@ def gen_validity_js():
         "  /* ── Name field: stepped check using nested Variable dict ── */\n"
         '  if (fieldName === "Name") {\n'
         '    var form = input.closest(\'[id$="_form"]\');\n'
-        '    var typeInput = form ? form.querySelector(\'[data-name="Type"]\') : null;\n'
+        '    var typeInput = form ? form.querySelector(\'[data-name="Category"]\') : null;\n'
         '    var typeVal = typeInput ? typeInput.value.trim().toLowerCase() : "";\n'
         '    var half = input.closest(".half");\n'
         '    var insertBtn = half ? half.querySelector(".insert-btn") : null;\n'
@@ -670,7 +664,7 @@ def gen_validity_js():
         "  var classKey = fieldName;\n"
         '  if (fieldName === "Value") {\n'
         '    var form = input.closest("[id$=\\"_form\\"]");\n'
-        '    var typeInput = form.querySelector(\'[data-name=\"Type\"]\');\n'
+        '    var typeInput = form.querySelector(\'[data-name=\"Category\"]\');\n'
         "    var typeVal = typeInput ? typeInput.value.trim().toLowerCase() : \"\";\n"
         "\n"
         '    if (typeVal === "unit") {\n'
@@ -1114,7 +1108,7 @@ def _gen_field_extract(lines, name, typ, prefix, PREFIX, tbl_var, idx="count"):
     ci = c_ident(name)
     ci_upper = ci.upper()
     enum_val = f"COL_{PREFIX}_{ci_upper}_{typ.upper()}"
-    xml_tag = c_ident(XML_FIELD_NAMES.get(name, name))  # use XSD alias if canonical was remapped
+    xml_tag = c_ident(name)
 
     lines.append(f'    extract_tag(row_buf, "{xml_tag}", buf, sizeof(buf));')
     lines.append(f"    if (buf[0] && !validate_{prefix}_value({enum_val}, buf)) {{")
@@ -1411,7 +1405,7 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                     ci = c_ident(fn)
                     ci_upper = ci.upper()
                     enum_val = f"COL_{PREFIX}_{ci_upper}_{typ.upper()}"
-                    xml_tag = c_ident(XML_FIELD_NAMES.get(fn, fn))
+                    xml_tag = c_ident(fn)
                     lines.append(f'    extract_tag(row_buf, "{xml_tag}", buf, sizeof(buf));')
                     lines.append(f"    if (buf[0] && !validate_{prefix}_value({enum_val}, buf)) {{")
                     lines.append(f"      pos = row_end + 6; continue;")
@@ -1451,7 +1445,7 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                         ci_upper = ci.upper()
                         enum_val = f"COL_{PREFIX_O}_{ci_upper}_{typ.upper()}"
                         temp = f"_t_{ci}"
-                        xml_tag = c_ident(XML_FIELD_NAMES.get(fn, fn))
+                        xml_tag = c_ident(fn)
                         lines.append(f'    extract_tag(row_buf, "{xml_tag}", buf, sizeof(buf));')
                         lines.append(f"    if (buf[0] && !validate_{prefix_o}_value({enum_val}, buf)) {{")
                         lines.append(f"      pos = row_end + 6; continue;")
@@ -1469,10 +1463,10 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                     lines.append(f"    /* ── hashmap lookup using temps: check if var already registered ── */")
                     lines.append(f"    uint16_t _cls_idx = INVALID_INDEX;")
                     lines.append(f"    uint16_t _var_pool_id = INVALID_INDEX;")
-                    # Find Class/Name/Type string temp var names
+                    # Find Class/Name/Category string temp var names
                     _cls_ci  = next((c_ident(fn) for fn, typ in sc_fields_typed if typ == "string" and c_ident(fn) == "Class"), None)
                     _name_ci = next((c_ident(fn) for fn, typ in sc_fields_typed if typ == "string" and c_ident(fn) == "Name"), None)
-                    _type_ci = next((c_ident(fn) for fn, typ in sc_fields_typed if typ == "string" and c_ident(fn) == "Type"), None)
+                    _type_ci = next((c_ident(fn) for fn, typ in sc_fields_typed if typ == "string" and c_ident(fn) in ("Category", "Type")), None)
                     if _cls_ci and _name_ci and _type_ci:
                         lines.append(f"    if (_t_{_cls_ci}[0] && _t_{_name_ci}[0] && _t_{_type_ci}[0]) {{")
                         lines.append(f"      _cls_idx = dm_class_map_find(_t_{_cls_ci});")
@@ -1565,7 +1559,8 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                         lines.append(f"      {{")
                         lines.append(f"        uint16_t _new_cls = dm_class_map_find({sv}->rows[{si}].Class);")
                         lines.append(f"        if (_new_cls != INVALID_INDEX) {{")
-                        lines.append(f"          uint16_t _new_vid = dm_var_map_find(_new_cls, {sv}->rows[{si}].Name, {sv}->rows[{si}].Type);")
+                        _cat_field = _type_ci if _type_ci else "Category"
+                        lines.append(f"          uint16_t _new_vid = dm_var_map_find(_new_cls, {sv}->rows[{si}].Name, {sv}->rows[{si}].{_cat_field});")
                         lines.append(f"          if (_new_vid != INVALID_INDEX && {sv}->rows[{si}].constraint_id != -1)")
                         lines.append(f"            var_pool[_new_vid].constraint_idx = {sv}->rows[{si}].constraint_id;")
                         lines.append(f"        }}")
@@ -1823,9 +1818,9 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                 nf = c_ident(cfg["name_field"])
                 tf = c_ident(cfg["type_field"])
                 vf = c_ident(cfg["value_field"])
-                lines.append(f"    row.Name  = tbl->rows[count].{nf};")
-                lines.append(f"    row.Type  = tbl->rows[count].{tf};")
-                lines.append(f"    row.Value = tbl->rows[count].{vf};")
+                lines.append(f"    row.Name     = tbl->rows[count].{nf};")
+                lines.append(f"    row.Category = tbl->rows[count].{tf};")
+                lines.append(f"    row.Value    = tbl->rows[count].{vf};")
                 lines.append(f"    dm_set_value(&row, &tbl->rows[count].{vf});")
                 lines.append("")
                 printf_fmts = []
@@ -2326,7 +2321,7 @@ function insertRow(table, schema) {
       const savedField = el.dataset.field || "";
       const fId = table + "_form";
       const inp2 = document.createElement("input");
-      inp2.dataset.name = "Type";
+      inp2.dataset.name = "Category";
       inp2.dataset.type = savedType;
       inp2.placeholder = savedType;
       if (savedField) inp2.dataset.field = savedField;
@@ -2377,7 +2372,7 @@ function renderTable(table, schema) {
   } else if (table === "Variables") {
     const ci = schema.findIndex(f => f.name === "Class");
     const ni = schema.findIndex(f => f.name === "Name");
-    const ti = schema.findIndex(f => f.name === "Type");
+    const ti = schema.findIndex(f => f.name === "Category");
     state[table].sort((a, b) =>
       _cmp(a[ci] ?? "", b[ci] ?? "") ||
       _cmp(a[ni] ?? "", b[ni] ?? "") ||
@@ -2443,7 +2438,7 @@ function renderTable(table, schema) {
 
   const _gci = schema.findIndex(f => f.name === "Class");
   const _gni = (table === "Variables") ? schema.findIndex(f => f.name === "Name") : -1;
-  const _gti = (table === "Variables") ? schema.findIndex(f => f.name === "Type") : -1;
+  const _gti = (table === "Variables") ? schema.findIndex(f => f.name === "Category") : -1;
   function _groupKey(r) {
     const cls = _gci >= 0 ? (r[_gci] ?? "") : "";
     const nam = _gni >= 0 ? (r[_gni] ?? "") : "";

@@ -345,7 +345,7 @@ void modbus_setup(void)
     digitalWrite(MODBUS_DE_RE_PIN, LOW);   /* default: receive mode */
     Serial1.begin(MODBUS_BAUD, SERIAL_8N1, MODBUS_RX_PIN, MODBUS_TX_PIN);
     Serial.printf("[Modbus] Table has %d row(s)\n", variables_modbus_table.count);
-    xTaskCreate(modbus_task, "modbus", 4096, NULL, 1, NULL);
+    xTaskCreate(modbus_task, "modbus", 4096, NULL, 3, NULL);
     Serial.println("[Modbus] Ready");
 }
 
