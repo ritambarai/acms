@@ -199,7 +199,12 @@ bool wifi_manager_init(const char *ssid, const char *password)
     Serial.println("[DNS]  http://" WIFI_PORTAL_DOMAIN
                    "  -> " + WiFi.localIP().toString());
 
-    mqtt_manager_connect();
+    /* MQTT is intentionally NOT connected here.
+     * acms_system_init() (XML parsing, task creation) runs after this call,
+     * and loop() → wifi_manager_loop() → mqtt.loop() won't run until setup()
+     * returns.  If we connected now the broker would drop the connection before
+     * the first keepalive ping.  mqtt_manager_connect() is called explicitly in
+     * setup() after acms_system_init() completes. */
 
     return true;
 }
