@@ -13,7 +13,8 @@ extern "C" {
 #define MAX_INCREMENT_ROWS MAX_VAR_POOL_CAP
 
 typedef struct {
-  float  Increment;
+  float  Step;        /* per-tick step (sign = direction); loaded from XSD Increment column */
+  float  Range;       /* oscillation half-width: (1 ± MARGIN) * |threshold - ini_val|; computed at task start */
   float  ini_val;
   float  threshold;   /* -9999.0f = no threshold */
   float *value_ptr;

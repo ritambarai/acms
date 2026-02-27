@@ -16,7 +16,7 @@ extern "C" {
 #include "xml_defaults.h"
 
 #define INCREMENT_LOOP_INTERVAL_MS      1000
-#define INCREMENT_THRESHOLD_MARGIN      0.5f  /* ±50 % overshoot margin for numeric cycling */
+#define INCREMENT_THRESHOLD_MARGIN      0.9f  /* ±50 % overshoot margin for numeric cycling */
 
 /* xml_parser.cpp functions */
 extern int  load_variables_from_spiffs(void);
@@ -43,6 +43,10 @@ static uint32_t reboot_at      = 0;
 static volatile bool reload_variables_pending = false;
 static volatile bool reload_metadata_pending  = false;
 static volatile bool reload_settings_pending  = false;
+
+/* Handle to increment_task — captured at task creation so http_task can
+ * suspend/resume it around table reloads to prevent SMP race conditions. */
+static TaskHandle_t increment_task_handle = NULL;
 
 /* =========================================================
  * ADDRESS POOL (STABLE BACKING STORAGE FOR ext_addr)
@@ -95,17 +99,22 @@ static void handle_get_xml() {
 
   if (SPIFFS.exists(uri)) {
     File f = SPIFFS.open(uri, "r");
-    server.streamFile(f, "application/xml");
-    f.close();
-    return;
+    if (f && f.size() > 0) {
+      server.streamFile(f, "application/xml");
+      f.close();
+      return;
+    }
+    if (f) f.close();
+    /* file exists but is empty — fall through to embedded default */
   }
 
-  /* SPIFFS file absent — serve the embedded compile-time default */
+  /* SPIFFS file absent or empty — serve embedded compile-time default.
+   * Use send_P to stream directly from flash without a large heap alloc. */
   const char *fallback = nullptr;
   if      (uri == "/Metadata.xml")  fallback = METADATA_XML_DEFAULT;
   else if (uri == "/Variables.xml") fallback = VARIABLES_XML_DEFAULT;
 
-  if (fallback) server.send(200, "application/xml", fallback);
+  if (fallback) server.send_P(200, "application/xml", fallback);
   else          server.send(404, "text/plain", "Not found");
 }
 
@@ -147,7 +156,27 @@ static void handle_get_settings_xml() {
   server.send(200, "application/xml", buf);
 }
 
-/* ── POST /<Table>.xml → save to SPIFFS, reload table ── */
+/* ── GET /alert_count → JSON object with total logged alert count (no auth) ── */
+static void handle_alert_count() {
+  char buf[32];
+  snprintf(buf, sizeof(buf), "{\"count\":%u}", alert_log_count);
+  server.send(200, "application/json", buf);
+}
+
+/* ── GET /alert_log.jsonl → stream JSONL file from SPIFFS as download ── */
+static void handle_alert_log() {
+  if (!require_auth()) return;
+  if (!SPIFFS.exists("/alert_log.jsonl")) {
+    server.send(404, "text/plain", "No alert log");
+    return;
+  }
+  File f = SPIFFS.open("/alert_log.jsonl", "r");
+  server.sendHeader("Content-Disposition", "attachment; filename=\"alert_log.jsonl\"");
+  server.streamFile(f, "application/x-ndjson");
+  f.close();
+}
+
+/* ── POST /Settings.xml → save to SPIFFS via plain body (small, ~300 bytes) ── */
 static void handle_post_xml() {
   if (!require_auth()) return;
   String uri  = server.uri();
@@ -170,18 +199,54 @@ static void handle_post_xml() {
   f.close();
   Serial.println("  Saved to SPIFFS");
 
-  /* Respond immediately — before any reload or MQTT publish.
-   * Reloads are deferred to the http_task loop so that:
-   *   a) This handler returns fast (browser fetch never times out).
-   *   b) sync_all / MQTT publish never run inside a handler, avoiding a
-   *      data race with increment_task (Core 0) on the same tables.
-   *   c) When /reboot follows (submit flow), the pending reloads are skipped
-   *      entirely — the restart reloads everything from SPIFFS cleanly. */
+  /* Respond immediately — before any reload or MQTT publish. */
+  server.send(200, "text/plain", "OK");
+  reload_settings_pending = true;
+}
+
+/* ── Streaming upload handler for large table XMLs (Variables, Metadata).
+ * Writes each multipart chunk directly to SPIFFS so the entire body never
+ * needs to fit in a single heap allocation — avoiding OOM on ~15 KB tables.
+ * Called repeatedly by the WebServer during multipart/form-data parsing. ── */
+static File s_upload_file;
+
+static void handle_upload_table_xml() {
+  HTTPUpload &up = server.upload();
+
+  if (up.status == UPLOAD_FILE_START) {
+    String path = server.uri();
+    Serial.printf("UPLOAD %s  (start)\n", path.c_str());
+    /* Only open the file if the request is authenticated; writes are
+     * skipped (file stays closed) if auth will fail in the main handler. */
+    if (server.authenticate(web_user, web_pass))
+      s_upload_file = SPIFFS.open(path, "w");
+
+  } else if (up.status == UPLOAD_FILE_WRITE) {
+    if (s_upload_file)
+      s_upload_file.write(up.buf, up.currentSize);
+
+  } else if (up.status == UPLOAD_FILE_END) {
+    if (s_upload_file) {
+      Serial.printf("UPLOAD %s  (%zu bytes total)\n",
+                    server.uri().c_str(), up.totalSize);
+      s_upload_file.close();
+    }
+
+  } else if (up.status == UPLOAD_FILE_ABORTED) {
+    if (s_upload_file) s_upload_file.close();
+  }
+}
+
+/* ── Completion handler — called after the upload finishes ── */
+static void handle_post_table_xml() {
+  if (!require_auth()) return;
+  String uri = server.uri();
+
+  /* Respond immediately; reloads are deferred to http_task (see below). */
   server.send(200, "text/plain", "OK");
 
   if      (uri == "/Variables.xml") reload_variables_pending = true;
   else if (uri == "/Metadata.xml")  reload_metadata_pending  = true;
-  else if (uri == "/Settings.xml")  reload_settings_pending  = true;
 }
 
 /* =========================================================
@@ -207,13 +272,16 @@ void acms_web_init(void)
   server.on("/reboot", HTTP_POST, handle_reboot);
 
   server.on("/Variables.xml", HTTP_GET,  handle_get_xml);
-  server.on("/Variables.xml", HTTP_POST, handle_post_xml);
+  server.on("/Variables.xml", HTTP_POST, handle_post_table_xml, handle_upload_table_xml);
 
   server.on("/Metadata.xml", HTTP_GET,  handle_get_xml);
-  server.on("/Metadata.xml", HTTP_POST, handle_post_xml);
+  server.on("/Metadata.xml", HTTP_POST, handle_post_table_xml, handle_upload_table_xml);
 
   server.on("/Settings.xml", HTTP_GET,  handle_get_settings_xml);
   server.on("/Settings.xml", HTTP_POST, handle_post_xml);
+
+  server.on("/alert_count",     HTTP_GET, handle_alert_count);
+  server.on("/alert_log.jsonl", HTTP_GET, handle_alert_log);
 
   server.begin();
   Serial.print("Web server started at http://");
@@ -239,15 +307,23 @@ static void http_task(void *pvParameters)
         if (!reboot_pending) {
             if (reload_metadata_pending) {
                 reload_metadata_pending = false;
+                /* Suspend increment_task (Core 0) while modifying shared tables
+                 * to prevent a LoadStoreError SMP race condition. */
+                if (increment_task_handle) vTaskSuspend(increment_task_handle);
                 load_metadata_from_spiffs();
                 am_fault_map_build();
+                if (increment_task_handle) vTaskResume(increment_task_handle);
             }
             if (reload_variables_pending) {
                 reload_variables_pending = false;
+                if (increment_task_handle) vTaskSuspend(increment_task_handle);
                 load_variables_from_spiffs();
+                if (increment_task_handle) vTaskResume(increment_task_handle);
             }
             if (reload_settings_pending) {
                 reload_settings_pending = false;
+                /* Settings reload only touches settings_* structs, not var_pool —
+                 * no need to suspend increment_task. */
                 load_settings_from_spiffs();
                 wifi_credentials_save(settings_general.SSID, settings_general.Password);
             }
@@ -258,7 +334,7 @@ static void http_task(void *pvParameters)
             ESP.restart();
         }
 
-        vTaskDelay(pdMS_TO_TICKS(1));
+        taskYIELD();  /* cooperative yield — resumes immediately if no higher-priority task is ready */
     }
 }
 
@@ -335,22 +411,22 @@ static void increment_task(void *pvParameters)
                 }
             }
 
-            /* ── direction sanity: ini_val must be on the correct side of threshold ── */
-            if (r->threshold != -9999.0f) {
-                bool _valid = (r->Increment > 0.0f) ? (r->ini_val < r->threshold)
-                            : (r->Increment < 0.0f) ? (r->ini_val > r->threshold)
-                            : true;  /* Increment==0 (randomised) always valid */
-                if (!_valid) {
-                    Serial.printf("[Increment] [%d] skipped — ini_val=%.4f not on correct side of threshold=%.4f for %s increment\n",
-                                  i, r->ini_val, r->threshold,
-                                  r->Increment > 0.0f ? "positive" : "negative");
+            /* ── Choice stability gate ──────────────────────────────────────────
+             * Roll a uniform [0,1) float each tick.
+             * If roll < MARGIN → stable: keep old value, skip this entry.
+             * Probability of change = 1 - MARGIN. */
+            if (_is_choice) {
+                float _roll = (float)random(0, 10000) / 10000.0f;
+                if (_roll < INCREMENT_THRESHOLD_MARGIN) {
+                    Serial.printf("[Increment] [%d] stable (roll=%.4f < margin=%.2f) — no change\n",
+                                  i, _roll, INCREMENT_THRESHOLD_MARGIN);
                     continue;
                 }
             }
 
             float old_val = *r->value_ptr;
             float new_val;
-            if (_is_choice && r->Increment == 0.0f) {
+            if (_is_choice && r->Step == 0.0f) {
                 /* randomise uniformly between 0 and threshold (inclusive) */
                 Serial.printf("[Increment] [%d] mode=randomised\n", i);
                 long _hi = (r->threshold != -9999.0f) ? (long)r->threshold : 1L;
@@ -358,33 +434,48 @@ static void increment_task(void *pvParameters)
                 Serial.printf("[Increment] [%d] choice random → new=%.0f (0..%ld)\n",
                               i, new_val, _hi);
             } else {
-                /* cycle: add Increment, reset to ini_val when 1.1*threshold is crossed
-                 * from either side (positive inc → >= 1.1*threshold,
-                 *                   negative inc → <= 1.1*threshold) */
+                /* cycle: add Step */
                 Serial.printf("[Increment] [%d] mode=%s\n", i,
-                              r->Increment > 0.0f ? "positive" : "negative");
-                new_val = old_val + r->Increment;
+                              r->Step > 0.0f ? "positive" : "negative");
+                new_val = old_val + r->Step;
+                float _lower = -9999.0f, _upper = -9999.0f;
                 if (r->threshold != -9999.0f) {
-                    float _limit;
                     if (_is_choice) {
                         /* discrete cycling: exact boundary — reset the moment we hit threshold */
-                        _limit = r->threshold;
+                        bool _hit = (r->Step >= 0.0f) ? (new_val >= r->threshold)
+                                                       : (new_val <= r->threshold);
+                        if (_hit) {
+                            new_val = r->ini_val;
+                            Serial.printf("[Increment] [%d] threshold hit — reset to ini_val=%.4f\n",
+                                          i, new_val);
+                        }
                     } else {
-                        /* numeric: ±50 % of threshold gives room to oscillate through it */
-                        _limit = (r->Increment >= 0.0f)
-                                 ? r->threshold + INCREMENT_THRESHOLD_MARGIN * r->threshold   /* positive upper */
-                                 : r->threshold - INCREMENT_THRESHOLD_MARGIN * r->threshold;  /* negative lower */
-                    }
-                    bool  _hit   = (r->Increment >= 0.0f) ? (new_val >= _limit)
-                                                           : (new_val <= _limit);
-                    if (_hit) {
-                        new_val = r->ini_val;
-                        Serial.printf("[Increment] [%d] threshold hit — reset to ini_val=%.4f\n",
-                                      i, new_val);
+                        /* numeric: symmetric bounds (1 ± MARGIN)×|threshold−ini_val| around
+                         * ini_val.  Sign of ± follows Step.  Crossing either bound wraps to
+                         * the opposite bound. */
+                        float _half = (r->Step >= 0.0f
+                                       ? 1.0f + INCREMENT_THRESHOLD_MARGIN
+                                       : 1.0f - INCREMENT_THRESHOLD_MARGIN)
+                                      * fabsf(r->threshold - r->ini_val);
+                        _lower = r->ini_val - _half;
+                        _upper = r->ini_val + _half;
+                        if (new_val >= _upper) {
+                            new_val = _lower;
+                            Serial.printf("[Increment] [%d] upper bound hit → wrap to lower=%.4f\n",
+                                          i, new_val);
+                        } else if (new_val <= _lower) {
+                            new_val = _upper;
+                            Serial.printf("[Increment] [%d] lower bound hit → wrap to upper=%.4f\n",
+                                          i, new_val);
+                        }
                     }
                 }
-                Serial.printf("[Increment] [%d] old=%.4f  inc=%.4f  new=%.4f\n",
-                              i, old_val, r->Increment, new_val);
+                if (!_is_choice && _lower != -9999.0f)
+                    Serial.printf("[Increment] [%d] old=%.4f  step=%.4f  new=%.4f  bounds=[%.4f, %.4f]\n",
+                                  i, old_val, r->Step, new_val, _lower, _upper);
+                else
+                    Serial.printf("[Increment] [%d] old=%.4f  step=%.4f  new=%.4f\n",
+                                  i, old_val, r->Step, new_val);
             }
             *r->value_ptr = new_val;
             update_variable(r->value_ptr);
@@ -461,8 +552,8 @@ void acms_system_init(const char *login_user, const char *login_pass)
 
   sync_all();
 
-  xTaskCreate(increment_task, "increment", 4096, NULL, 1, NULL);
-  xTaskCreatePinnedToCore(http_task, "http", 8192, NULL, 2, NULL, 1);
+  xTaskCreate(increment_task, "increment", 4096, NULL, 1, &increment_task_handle);
+  xTaskCreatePinnedToCore(http_task, "http", 8192, NULL, 10, NULL, 1);
 
   Serial.println("Variables registered");
 }

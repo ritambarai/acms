@@ -84,6 +84,27 @@ body {
   gap: 4px;
 }
 
+#alert-strip {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+#alert-count-badge {
+  font-size: 11px;
+  color: #555;
+  white-space: nowrap;
+}
+
+#dl-alerts-btn {
+  font-size: 11px;
+}
+
 .check-label {
   display: flex;
   align-items: center;
@@ -331,6 +352,13 @@ button {
 <body>
 <div class="main-header">
   <h1>ACMS Master Portal</h1>
+  <div id="alert-strip">
+    <button id="dl-alerts-btn" onclick="downloadAlerts()" title="Download alert log">Download Offline Logs</button>
+    <label class="check-label">
+  Alert Count: <span id="alert-count-badge">—</span>
+</label>
+
+  </div>
   <div id="submit-area">
     <button id="submit-btn" onclick="submitAll()">Submit</button>
     <label class="check-label">
@@ -372,8 +400,8 @@ button {
           <span class="error-msg"></span>
         </div>
         <div class="field">
-          <label>Alert cooldown</label>
-          <input placeholder="float" data-type="float" data-name="Alert_cooldown" oninput="validateField(this); settingsChanged()">
+          <label>Alert Cooldown(mins)</label>
+          <input placeholder="float" data-type="float" data-name="Alert_Cooldown(mins)" oninput="validateField(this); settingsChanged()">
           <span class="error-msg"></span>
         </div>
       </div>
@@ -626,11 +654,11 @@ var Variables_SCHEMA = [
 var TABLE_LIST = ["Metadata", "Variables"];
 
 var Settings_SUBCATS = {
-  "general": ["SSID", "Password", "Class_Pool_Size", "Var_Pool_Size", "Alert_cooldown"],
+  "general": ["SSID", "Password", "Class_Pool_Size", "Var_Pool_Size", "Alert_Cooldown(mins)"],
   "mqtt": ["Host", "Port", "Data_Topic", "Alert_Topic", "Mqtt_Username", "Mqtt_Password"],
   "json includes": ["Metadata", "Constraints", "Type_Unit"]
 };
-var Settings_TABLE_COLS = ["SSID", "Password", "Class_Pool_Size", "Var_Pool_Size", "Alert_cooldown", "Host", "Port", "Data_Topic", "Alert_Topic", "Mqtt_Username", "Mqtt_Password", "Metadata", "Constraints", "Type_Unit"];
+var Settings_TABLE_COLS = ["SSID", "Password", "Class_Pool_Size", "Var_Pool_Size", "Alert_Cooldown(mins)", "Host", "Port", "Data_Topic", "Alert_Topic", "Mqtt_Username", "Mqtt_Password", "Metadata", "Constraints", "Type_Unit"];
 
 
 /* ======== PRELOADED XML (embedded at build time) ======== */
@@ -660,30 +688,30 @@ window.addEventListener("DOMContentLoaded", () => {
 
   document.documentElement.style.setProperty("--field-width", FIELD_WIDTH);
 
-  /* Initialize each table; call logStateTables() once all are loaded */
-  let _tablesLoaded = 0;
-  function _onTableLoaded() {
-    if (++_tablesLoaded === TABLE_LIST.length) logStateTables();
-  }
-
-  TABLE_LIST.forEach(table => {
-
+  /* Initialize tables sequentially: each fetch completes before the next
+   * starts, so the ESP's single-threaded WebServer is never hit with
+   * concurrent requests.  On PC, PRELOAD_XML always has data so every
+   * step is synchronous and the queue drains instantly. */
+  const _queue = TABLE_LIST.slice();
+  function _loadNext() {
+    if (_queue.length === 0) {
+      logStateTables();
+      state["Settings"] = {};
+      loadSettings();
+      return;
+    }
+    const table = _queue.shift();
     const schema = window[table + "_SCHEMA"];
     state[table] = [];
-
     buildForm(table);
-
-    /* load from embedded XML (PC) or fetch from SPIFFS (ESP) */
     if (PRELOAD_XML[table]) {
       parseXML(PRELOAD_XML[table], table, schema);
-      _onTableLoaded();
+      _loadNext();
     } else {
-      loadTable(table, schema, _onTableLoaded);
+      loadTable(table, schema, _loadNext);
     }
-  });
-
-  state["Settings"] = {};
-  loadSettings();
+  }
+  _loadNext();
 
 });
 
@@ -783,8 +811,83 @@ function renderTable(table, schema) {
       _cmp(a[ti] ?? "", b[ti] ?? ""));
   }
 
+  /* ── Row-group colouring ──────────────────────────────────────────────
+   * Variables : group key = (Class, Name)  — all Type/Unit/Constraint rows
+   *             for the same variable share one base colour; rows whose
+   *             Type column equals "type" or "unit" get a darker, more
+   *             saturated variant of that base colour.
+   * Metadata  : group key = (Class) only  — all rows in the same class share.
+   * Other     : group key = (Class) if present, else no colouring.
+   * Palette is ordered warmest → coolest (reds→oranges→yellows→greens→blues→purples).
+   * ─────────────────────────────────────────────────────────────────── */
+  const _GROUP_PALETTE = [
+    "#F4F7E4",  /* pale olive     */  "#E6F4DF",  /* soft green      */
+    "#ECFAEE",  /* leafy green    */  "#E4F9EE",  /* mint            */
+    "#D0F4F2",  /* aqua           */  "#E8F4F9",  /* powder blue     */
+    "#DEF0FF",  /* sky blue       */  "#EBF2FF",  /* light cornflower*/
+    "#E6DAEE",  /* dusty purple   */  "#F2E0FC",  /* lavender        */
+    "#FBEBF0",  /* muted pink     */  "#FFE5EA",  /* rose            */
+    "#FDE2D5",  /* coral pastel   */  "#FFEBD2",  /* soft peach      */
+    "#FFF2DA",  /* apricot        */  "#FBF3E1"   /* warm sand       */
+  ];
+
+  /* Darken by ~18 % lightness and boost saturation by ~20 % (HSL space). */
+  function _darkenSaturate(hex) {
+    const r = parseInt(hex.slice(1,3),16)/255;
+    const g = parseInt(hex.slice(3,5),16)/255;
+    const b = parseInt(hex.slice(5,7),16)/255;
+    const max = Math.max(r,g,b), min = Math.min(r,g,b), d = max - min;
+    const l = (max + min) / 2;
+    const s = d === 0 ? 0 : d / (1 - Math.abs(2*l - 1));
+    let h = 0;
+    if (d !== 0) {
+      if      (max === r) h = ((g - b) / d + 6) % 6;
+      else if (max === g) h = (b - r) / d + 2;
+      else                h = (r - g) / d + 4;
+      h /= 6;
+    }
+    const nl = Math.max(0, l - 0.06);
+    const ns = Math.min(1, s + 0.08);
+    function _h2r(p, q, t) {
+      if (t < 0) t += 1; if (t > 1) t -= 1;
+      if (t < 1/6) return p + (q - p) * 6 * t;
+      if (t < 1/2) return q;
+      if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+      return p;
+    }
+    let rn, gn, bn;
+    if (ns === 0) { rn = gn = bn = nl; } else {
+      const q = nl < 0.5 ? nl * (1 + ns) : nl + ns - nl * ns;
+      const p = 2 * nl - q;
+      rn = _h2r(p, q, h + 1/3);
+      gn = _h2r(p, q, h);
+      bn = _h2r(p, q, h - 1/3);
+    }
+    const th = v => Math.round(v * 255).toString(16).padStart(2, "0");
+    return "#" + th(rn) + th(gn) + th(bn);
+  }
+
+  const _gci = schema.findIndex(f => f.name === "Class");
+  const _gni = (table === "Variables") ? schema.findIndex(f => f.name === "Name") : -1;
+  const _gti = (table === "Variables") ? schema.findIndex(f => f.name === "Type") : -1;
+  function _groupKey(r) {
+    const cls = _gci >= 0 ? (r[_gci] ?? "") : "";
+    const nam = _gni >= 0 ? (r[_gni] ?? "") : "";
+    return cls + "\x00" + nam;
+  }
+  const _gcMap = {};
+  let _gcIdx = 0;
+  state[table].forEach(r => {
+    const k = _groupKey(r);
+    if (!(k in _gcMap)) _gcMap[k] = _GROUP_PALETTE[_gcIdx++ % _GROUP_PALETTE.length];
+  });
+
   state[table].forEach((r, i) => {
-    let tr = `<tr><td class="row-actions-left">` +
+    const _bgBase = _gcMap[_groupKey(r)] ?? "";
+    const _typeVal = _gti >= 0 ? String(r[_gti] ?? "").toLowerCase() : "";
+    const _isTypeUnit = _typeVal === "type" || _typeVal === "unit";
+    const _bgCol = (_bgBase && _isTypeUnit) ? _darkenSaturate(_bgBase) : _bgBase;
+    let tr = `<tr style="background-color:${_bgCol}"><td class="row-actions-left">` +
              `<span class="copy-row" onclick="copyRow('${table}',${i})" title="Copy to form">&#x2398;</span>` +
              `</td>`;
     r.forEach(v => { tr += `<td>${v ?? ""}</td>`; });
@@ -916,6 +1019,34 @@ function loadTable(table, schema, onDone) {
     .then(r => { if (r.ok) return r.text(); throw new Error("HTTP " + r.status); })
     .then(xml => { parseXML(xml, table, schema); if (onDone) onDone(); })
     .catch(e => { console.error("[ACMS] Failed to load " + table + ".xml:", e); if (onDone) onDone(); });
+}
+
+
+/* ---------- ALERT COUNT BADGE + DOWNLOAD ---------- */
+(function() {
+  const badge = document.getElementById("alert-count-badge");
+
+  /* Only poll on real ESP — skip on local-file mode (no server) */
+  if (location.hostname === "") return;
+
+  function fetchAlertCount() {
+    fetch("/alert_count")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d !== null && badge) badge.textContent = d.count; })
+      .catch(() => {});
+  }
+
+  fetchAlertCount();
+  setInterval(fetchAlertCount, 5000);
+})();
+
+function downloadAlerts() {
+  const a = document.createElement("a");
+  a.href = "/alert_log.jsonl";
+  a.download = "alert_log.jsonl";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
 
 
@@ -1221,11 +1352,9 @@ async function submitAll() {
     try {
       for (const t of TABLE_LIST) {
         const xml = rowsToXML(t, window[t + "_SCHEMA"]);
-        const r = await fetch("/" + t + ".xml", {
-          method: "POST",
-          headers: { "Content-Type": "application/xml" },
-          body: xml
-        });
+        const fd = new FormData();
+        fd.append("file", new Blob([xml], {type: "application/xml"}), t + ".xml");
+        const r = await fetch("/" + t + ".xml", { method: "POST", body: fd });
         if (!r.ok) throw new Error(t + " save failed (" + r.status + ")");
       }
 
@@ -1246,7 +1375,11 @@ async function submitAll() {
         if (!r.ok) throw new Error("Settings save failed (" + r.status + ")");
       }
 
-      if (dlChecked) downloadZIP();
+      if (dlChecked) {
+        downloadZIP();
+        /* Let the browser commit the blob download before the page tears down */
+        await new Promise(r => setTimeout(r, 1500));
+      }
 
       await fetch("/reboot", { method: "POST" }).catch(() => {});
       await waitForReboot(btn);
