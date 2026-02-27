@@ -25,17 +25,17 @@ typedef struct {
     uint16_t    alert_idx;      /* slot index in alert_table.alerts[]           */
     uint16_t    var_idx;        /* var_pool index that triggered this alert      */
 
-    /* identity — const pointers into var_pool / metadata (not owned) */
-    const char *class_name;
-    const char *var_name;
-    const char *var_type;
+    /* identity — owned copies so pool reloads cannot produce dangling pointers */
+    char        class_name[32];
+    char        var_name[32];
+    char        var_type[16];
 
     uint16_t    constraint_id;  /* index into variables_constraints_table        */
     float       value;          /* var value at the moment the constraint fired  */
     float       threshold;      /* threshold value that was violated             */
     float       fault_code;     /* fault code from constraints row               */
     float       operation_id;   /* operation id from constraints row             */
-    const char *fault_message;  /* looked up from metadata Fault_Code class      */
+    char        fault_message[128]; /* looked up from metadata Fault_Code class  */
 
     time_t      timestamp;      /* Unix epoch at enqueue time (for dedup/diff)   */
     char        datetime[32];   /* UTC timestamp "YYYY-MM-DDTHH:MM:SSZ"          */
@@ -45,20 +45,17 @@ typedef struct {
  *  INITIALISER MACRO  (mirrors CLASS_INIT / VAR_INIT)
  * ============================================================ */
 
+/* char[] fields are zero-initialised by the C99 compound-literal default;
+ * no explicit initialiser needed for them. */
 #define ALERT_INIT(idx) ((alert_t){       \
     .alert_idx     = (idx),               \
     .var_idx       = INVALID_INDEX,       \
-    .class_name    = NULL,                \
-    .var_name      = NULL,                \
-    .var_type      = NULL,                \
     .constraint_id = INVALID_INDEX,       \
     .value         = 0.0f,               \
     .threshold     = 0.0f,               \
     .fault_code    = 0.0f,               \
     .operation_id  = 0.0f,               \
-    .fault_message = NULL,                \
     .timestamp     = 0,                   \
-    .datetime      = {0}                  \
 })
 
 /* ============================================================
@@ -84,7 +81,8 @@ typedef struct {
 } alert_table_t;
 
 extern alert_table_t alert_table;
-extern uint32_t alert_log_count;  /* total entries ever appended to /alert_log.jsonl */
+extern uint32_t      alert_log_count;           /* total entries ever appended to /alert_log.jsonl */
+extern TaskHandle_t  alert_publish_task_handle; /* used by suspend_all_tasks() in acms_web.cpp     */
 
 /* ============================================================
  *  INITIALISATION

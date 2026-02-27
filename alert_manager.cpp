@@ -35,7 +35,8 @@ alert_table_t alert_table;
 
 static SemaphoreHandle_t alert_mutex = NULL;
 
-uint32_t alert_log_count = 0;  /* total entries appended to /alert_log.jsonl */
+uint32_t    alert_log_count          = 0;    /* total entries appended to /alert_log.jsonl */
+TaskHandle_t alert_publish_task_handle = NULL; /* captured at task creation for suspend_all_tasks() */
 
 /* ============================================================
  *  UTILITY — current UTC time string
@@ -123,14 +124,14 @@ static void log_alert_ptr(const alert_t *a)
         "}\n",
         a->alert_idx,
         a->var_idx,
-        a->class_name    ? a->class_name    : "",
-        a->var_name      ? a->var_name      : "",
-        a->var_type      ? a->var_type      : "",
+        a->class_name,
+        a->var_name,
+        a->var_type,
         a->constraint_id,
         a->value,
         a->threshold,
         a->fault_code,
-        a->fault_message ? a->fault_message : "",
+        a->fault_message,
         a->datetime);
 
     File f = SPIFFS.open("/alert_log.jsonl", "a");
@@ -144,9 +145,7 @@ static void log_alert_ptr(const alert_t *a)
 
     Serial.printf("[Alert] Logged idx=%u  fault=%.0f  %s/%s  val=%.2f  %s\n",
                   a->alert_idx, a->fault_code,
-                  a->class_name ? a->class_name : "?",
-                  a->var_name   ? a->var_name   : "?",
-                  a->value, a->datetime);
+                  a->class_name, a->var_name, a->value, a->datetime);
 }
 
 void am_log_alert(uint16_t alert_idx)
@@ -184,19 +183,20 @@ uint16_t am_enqueue_alert(uint16_t    var_idx,
     }
     alert_table.tail = slot;
 
-    alert_table.alerts[slot] = ALERT_INIT(slot);
-    alert_table.alerts[slot].var_idx        = var_idx;
-    alert_table.alerts[slot].constraint_id  = constraint_id;
-    alert_table.alerts[slot].value          = value;
-    alert_table.alerts[slot].threshold      = threshold;
-    alert_table.alerts[slot].fault_code     = fault_code;
-    alert_table.alerts[slot].operation_id   = operation_id;
-    alert_table.alerts[slot].class_name     = class_name;
-    alert_table.alerts[slot].var_name       = var_name;
-    alert_table.alerts[slot].var_type       = var_type;
-    alert_table.alerts[slot].fault_message  = fault_message;
-    alert_table.alerts[slot].timestamp      = time(NULL);
-    am_now(alert_table.alerts[slot].datetime, sizeof(alert_table.alerts[slot].datetime));
+    alert_t *s = &alert_table.alerts[slot];
+    *s = ALERT_INIT(slot);
+    s->var_idx       = var_idx;
+    s->constraint_id = constraint_id;
+    s->value         = value;
+    s->threshold     = threshold;
+    s->fault_code    = fault_code;
+    s->operation_id  = operation_id;
+    snprintf(s->class_name,    sizeof(s->class_name),    "%s", class_name    ? class_name    : "");
+    snprintf(s->var_name,      sizeof(s->var_name),      "%s", var_name      ? var_name      : "");
+    snprintf(s->var_type,      sizeof(s->var_type),      "%s", var_type      ? var_type      : "");
+    snprintf(s->fault_message, sizeof(s->fault_message), "%s", fault_message ? fault_message : "");
+    s->timestamp = time(NULL);
+    am_now(s->datetime, sizeof(s->datetime));
 
     xSemaphoreGive(alert_mutex);
     return slot;
@@ -259,18 +259,19 @@ void add_alert_queue(uint16_t var_id, uint16_t constraint_id)
     const char *cls_name =
         (v->class_idx < MAX_CLASS_POOL_CAP) ? class_pool[v->class_idx].class_name : NULL;
 
-    /* ── 2. Build temp alert_t ── */
-    alert_t tmp = ALERT_INIT(0);            /* placeholder slot index */
+    /* ── 2. Build temp alert_t (copies strings so pool reloads can't corrupt it) ── */
+    alert_t tmp = ALERT_INIT(0);
     tmp.var_idx       = var_id;
-    tmp.class_name    = cls_name;
-    tmp.var_name      = v->var_name;
-    tmp.var_type      = v->var_type;
     tmp.constraint_id = constraint_id;
-    tmp.value         = v->cached_val;      /* snapshot at the moment of violation */
+    tmp.value         = v->cached_val;
     tmp.threshold     = cr->Threshold;
     tmp.fault_code    = cr->Fault_Code;
     tmp.operation_id  = cr->Operation_ID;
-    tmp.fault_message = am_fault_map_find(cr->Fault_Code);
+    snprintf(tmp.class_name,    sizeof(tmp.class_name),    "%s", cls_name            ? cls_name            : "");
+    snprintf(tmp.var_name,      sizeof(tmp.var_name),      "%s", v->var_name         ? v->var_name         : "");
+    snprintf(tmp.var_type,      sizeof(tmp.var_type),      "%s", v->var_type         ? v->var_type         : "");
+    const char *_fm = am_fault_map_find(cr->Fault_Code);
+    snprintf(tmp.fault_message, sizeof(tmp.fault_message), "%s", _fm                 ? _fm                 : "");
     tmp.timestamp     = time(NULL);
     am_now(tmp.datetime, sizeof(tmp.datetime));
 
@@ -307,9 +308,7 @@ void add_alert_queue(uint16_t var_id, uint16_t constraint_id)
             if (suppress) {
                 xSemaphoreGive(alert_mutex);
                 Serial.printf("[Alert] Dedup skipped  fault=%.0f  %s/%s\n",
-                              tmp.fault_code,
-                              tmp.class_name ? tmp.class_name : "?",
-                              tmp.var_name   ? tmp.var_name   : "?");
+                              tmp.fault_code, tmp.class_name, tmp.var_name);
                 return;
             }
         }
@@ -380,15 +379,15 @@ static void alert_publish_task(void *pvParameters)
             "\"fault_message\":\"%s\","
             "\"datetime\":\"%s\""
             "}",
-            local.class_name    ? local.class_name    : "",
-            local.var_name      ? local.var_name      : "",
-            local.var_type      ? local.var_type      : "",
+            local.class_name,
+            local.var_name,
+            local.var_type,
             local.var_idx,
             local.constraint_id,
             local.value,
             local.threshold,
             local.fault_code,
-            local.fault_message ? local.fault_message : "",
+            local.fault_message,
             local.datetime);
 
         /* ── Publish — retain=false (live alert, not a persistent state) ── */
@@ -404,9 +403,7 @@ static void alert_publish_task(void *pvParameters)
                 xSemaphoreGive(alert_mutex);
             }
             Serial.printf("[Alert] Published fault=%.0f  %s/%s\n",
-                          local.fault_code,
-                          local.class_name ? local.class_name : "?",
-                          local.var_name   ? local.var_name   : "?");
+                          local.fault_code, local.class_name, local.var_name);
         } else {
             /* Retry after a short back-off */
             Serial.println("[Alert] MQTT publish failed — will retry");
@@ -425,7 +422,7 @@ void alert_mqtt_task_start(void)
         4096,           /* stack words */
         NULL,
         2,              /* priority — above idle, below increment_task */
-        NULL,
+        &alert_publish_task_handle,
         1);             /* Core 1 — same as http_task; no shared-data race with Core 0 */
 
     if (rc != pdPASS) {
