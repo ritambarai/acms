@@ -225,6 +225,7 @@ typedef struct {
   char* Password;
   int32_t Class_Pool_Size;
   int32_t Var_Pool_Size;
+  float Alert_cooldown;
 } settings_general_t;
 
 extern settings_general_t settings_general;
@@ -269,4 +270,9 @@ static inline int32_t effective_class_pool_size(void) {
   if (v <= 0)                v = MAX_CLASS_POOL_CAP;
   if (v > MAX_CLASS_POOL_CAP) v = MAX_CLASS_POOL_CAP;
   return v;
+}
+
+static inline float effective_alert_cooldown(void) {
+  /* 0.0f = no dedup  |  > 0.0f = minutes  |  < 0.0f = always suppress */
+  return settings_general.Alert_cooldown;
 }

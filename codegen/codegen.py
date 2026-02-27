@@ -1059,6 +1059,27 @@ def gen_c_schema_h(tables, subcategories=None, settings_subcats=None, settings_f
                     lines.append("}")
                     lines.append("")
 
+            # ── Alert cooldown accessor — search all subcats for Alert_cooldown ──
+            cooldown_struct = None
+            for sc_name2, sc_val2 in other_subcats_s.items():
+                if isinstance(sc_val2, dict):
+                    for inner_name2, inner_fields2 in sc_val2.items():
+                        if "Alert_cooldown" in inner_fields2:
+                            cooldown_struct = f"settings_{c_ident(inner_name2).lower()}"
+                            break
+                else:
+                    if "Alert_cooldown" in sc_val2:
+                        cooldown_struct = f"settings_{c_ident(sc_name2).lower()}"
+                        break
+                if cooldown_struct:
+                    break
+            if cooldown_struct:
+                lines.append("static inline float effective_alert_cooldown(void) {")
+                lines.append(f"  /* 0.0f = no dedup  |  > 0.0f = minutes  |  < 0.0f = always suppress */")
+                lines.append(f"  return {cooldown_struct}.Alert_cooldown;")
+                lines.append("}")
+                lines.append("")
+
     return "\n".join(lines)
 
 
