@@ -109,4 +109,18 @@ bool dm_addr_map_delete(const void *addr);
 /* Commits only the maps indicated by flags */
 void dm_maps_commit_all(map_create_flags_t flags);
 
+/* ============================================================
+ *  FAULT-CODE MAP : float Fault_Code → const char *Message
+ *
+ *  Built from metadata_table rows where Class == "Fault_Code".
+ *  Call am_fault_map_build() (alert_manager.h) after each
+ *  load_metadata_from_spiffs() to keep the LUT current.
+ * ============================================================ */
+
+#define FAULT_MAP_SIZE  128   /* power of 2; must be ≥ 2× distinct fault codes */
+
+void        am_fault_map_clear(void);
+void        am_fault_map_insert(float fault_code, const char *message);
+const char *am_fault_map_find(float fault_code);
+
 #endif /* HASHMAP_H */

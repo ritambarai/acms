@@ -6,6 +6,7 @@
 extern "C" {
 #include "schema.h"
 #include "data_manager.h"
+#include "alert_manager.h"
 }
 #include <SPIFFS.h>
 #include <Preferences.h>
@@ -115,10 +116,10 @@ int load_metadata_from_spiffs(void) {
   String _content;
   File f = SPIFFS.open("/Metadata.xml", "r");
   if (f) { _content = f.readString(); f.close(); }
-  int n = (_content.length() > 0)
-          ? parse_metadata_xml(_content.c_str(), &metadata_table)
-          : 0;
-  if (n == 0) {
+  int n;
+  if (_content.length() > 0) {
+    n = parse_metadata_xml(_content.c_str(), &metadata_table);
+  } else {
     Serial.println("[XML] Metadata.xml empty/missing -- using default");
     n = parse_metadata_xml(METADATA_XML_DEFAULT, &metadata_table);
   }
@@ -370,10 +371,10 @@ int load_variables_from_spiffs(void) {
   String content;
   File f = SPIFFS.open("/Variables.xml", "r");
   if (f) { content = f.readString(); f.close(); }
-  int n = (content.length() > 0)
-          ? parse_variables_xml(content.c_str(), &variables_description_table, &variables_modbus_table, &variables_constraints_table)
-          : 0;
-  if (n == 0) {
+  int n;
+  if (content.length() > 0) {
+    n = parse_variables_xml(content.c_str(), &variables_description_table, &variables_modbus_table, &variables_constraints_table);
+  } else {
     Serial.println("[XML] Variables.xml empty/missing -- using default");
     n = parse_variables_xml(VARIABLES_XML_DEFAULT, &variables_description_table, &variables_modbus_table, &variables_constraints_table);
   }
@@ -501,6 +502,7 @@ bool check_variable_constraints(uint16_t var_pool_id) {
         _triggered = true;
         Serial.printf("[Constraint] var_pool[%d]  val=%.4f  op=%d  thresh=%.4f  fault=%.0f  TRIGGERED\n",
                       var_pool_id, _val, (int)_op_id, _thresh, _fault);
+        add_alert_queue((uint16_t)var_pool_id, (uint16_t)_cid);
       }
     }
     _cid = variables_constraints_table.rows[_cid].constraints_id;

@@ -7,6 +7,7 @@
 extern "C" {
   #include "schema.h"
   #include "data_manager.h"
+  #include "alert_manager.h"
 }
 #include "network_manager.h"
 #include "json_telemetry.h"
@@ -35,6 +36,13 @@ static const char *web_pass = nullptr;
 
 static bool     reboot_pending = false;
 static uint32_t reboot_at      = 0;
+
+/* Deferred reload flags — set by the POST handler, consumed by http_task.
+ * Keeps handlers fast and avoids sync_all() / MQTT publish inside a handler,
+ * which would race with increment_task (Core 0) modifying the same tables. */
+static volatile bool reload_variables_pending = false;
+static volatile bool reload_metadata_pending  = false;
+static volatile bool reload_settings_pending  = false;
 
 /* =========================================================
  * ADDRESS POOL (STABLE BACKING STORAGE FOR ext_addr)
@@ -162,18 +170,18 @@ static void handle_post_xml() {
   f.close();
   Serial.println("  Saved to SPIFFS");
 
-  /* reload the corresponding table struct */
-  if (uri == "/Variables.xml") {
-    load_variables_from_spiffs();
-  } else if (uri == "/Metadata.xml") {
-    load_metadata_from_spiffs();
-  } else if (uri == "/Settings.xml") {
-    load_settings_from_spiffs();
-    /* Mirror WiFi credentials to NVS so they survive SPIFFS formats */
-    wifi_credentials_save(settings_general.SSID, settings_general.Password);
-  }
-
+  /* Respond immediately — before any reload or MQTT publish.
+   * Reloads are deferred to the http_task loop so that:
+   *   a) This handler returns fast (browser fetch never times out).
+   *   b) sync_all / MQTT publish never run inside a handler, avoiding a
+   *      data race with increment_task (Core 0) on the same tables.
+   *   c) When /reboot follows (submit flow), the pending reloads are skipped
+   *      entirely — the restart reloads everything from SPIFFS cleanly. */
   server.send(200, "text/plain", "OK");
+
+  if      (uri == "/Variables.xml") reload_variables_pending = true;
+  else if (uri == "/Metadata.xml")  reload_metadata_pending  = true;
+  else if (uri == "/Settings.xml")  reload_settings_pending  = true;
 }
 
 /* =========================================================
@@ -221,9 +229,35 @@ static void http_task(void *pvParameters)
 {
     for (;;) {
         server.handleClient();
+
+        /* Process deferred reloads — only when no reboot is scheduled.
+         * During a submit sequence the browser always ends with /reboot, so
+         * reboot_pending becomes true before these flags are consumed; we skip
+         * the reload entirely and let the restart load everything from SPIFFS.
+         * For standalone POSTs (no reboot) the reload runs normally here,
+         * outside any handler context, safe from reentrancy issues. */
+        if (!reboot_pending) {
+            if (reload_metadata_pending) {
+                reload_metadata_pending = false;
+                load_metadata_from_spiffs();
+                am_fault_map_build();
+            }
+            if (reload_variables_pending) {
+                reload_variables_pending = false;
+                load_variables_from_spiffs();
+            }
+            if (reload_settings_pending) {
+                reload_settings_pending = false;
+                load_settings_from_spiffs();
+                wifi_credentials_save(settings_general.SSID, settings_general.Password);
+            }
+        }
+
         if (reboot_pending && millis() >= reboot_at) {
+            Serial.flush();   /* drain any buffered Serial output before reset */
             ESP.restart();
         }
+
         vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
@@ -373,10 +407,13 @@ void acms_system_init(const char *login_user, const char *login_pass)
 
   /* ---------------- Core subsystems ---------------- */
   dm_system_init();
+  alert_system_init();
   acms_web_init();            /* mounts SPIFFS, provisions XML, starts webserver */
   load_settings_from_spiffs(); /* parse Settings.xml → populate settings_general/mqtt/json structs */
   get_metadata();             /* parse Metadata.xml → register with data manager → sync */
+  am_fault_map_build();       /* build fault-code → message LUT from metadata Fault_Code rows */
   load_variables_from_spiffs(); /* parse Variables.xml → populate description/constraints/modbus tables */
+  alert_mqtt_task_start();    /* start FreeRTOS task: drains alert_table → MQTT */
 
   // ---- Dump populated struct tables ---- 
   /*

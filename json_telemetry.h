@@ -21,8 +21,18 @@ void json_add_var(uint16_t var_idx);
 /* Remove a variable (by var_idx) from JSON */
 void json_remove_var(uint16_t var_idx);
 
-/* Send current JSON to server */
+/* Send current JSON to data topic */
 void json_send(void);
+
+/* Send a constraint-fired alert to the alert topic.
+ * dual mode  → Alert_Topic on dedicated alert client
+ * single mode→ Data_Topic on shared client             */
+void json_send_alert(const char *class_name,
+                     const char *var_name,
+                     float       value,
+                     float       fault_code,
+                     float       threshold,
+                     float       operation_id);
 
 void json_receive(void);
 

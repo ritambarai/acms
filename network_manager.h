@@ -18,7 +18,8 @@
 
 #ifdef __cplusplus
 #include <PubSubClient.h>
-extern PubSubClient mqtt;
+extern PubSubClient mqtt;        /* data topic client  */
+extern PubSubClient mqtt_alert;  /* alert topic client */
 #endif
 
 #ifdef __cplusplus
@@ -38,11 +39,20 @@ void wifi_manager_loop(void);
 /* Connect (or reconnect) to the MQTT broker. Blocks until connected. */
 void mqtt_manager_connect(void);
 
-/* Publish a payload to an MQTT topic. Returns true on success. */
+/* Publish a payload to the data topic. Returns true on success. */
 bool mqtt_manager_publish(const char *topic, const char *payload, bool retain);
 
-/* Returns true if the MQTT client is currently connected. */
+/* Publish a payload to the alert topic.
+ * dual mode  → uses dedicated alert client + Alert_Topic
+ * single mode→ uses data client + whichever topic is configured */
+bool mqtt_manager_publish_alert(const char *payload, bool retain);
+
+/* Returns true if the data MQTT client is currently connected. */
 bool mqtt_manager_connected(void);
+
+/* Returns true if the alert MQTT client is currently connected.
+ * In single-client mode this is the same as mqtt_manager_connected(). */
+bool mqtt_manager_connected_alert(void);
 
 /* Save WiFi credentials to NVS — persists across reboots and SPIFFS formats.
  * Call after user edits credentials in the web UI or captive portal. */
