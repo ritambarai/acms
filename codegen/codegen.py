@@ -5,6 +5,13 @@ import xml.etree.ElementTree as ET
 import sys
 
 XSD_NS = "{http://www.w3.org/2001/XMLSchema}"
+
+# Field name aliases: maps XSD element name → canonical name used everywhere in
+# generated C structs, enums, and JS schema.  The reverse map (XML_FIELD_NAMES)
+# is used when generating extract_tag() calls so the C parser still finds the
+# correct XML tag in the actual data files.
+FIELD_ALIASES   = {"Category": "Type"}
+XML_FIELD_NAMES = {v: k for k, v in FIELD_ALIASES.items()}
 MAX_ROWS = 128
 
 # Must match hashmap.h defines — single source of truth for Settings field max values
@@ -84,8 +91,9 @@ def parse_xsd(xsd_path):
         for child in row_seq.findall(XSD_NS + "element"):
             if "type" in child.attrib:
                 # Direct field (no subcategory)
+                raw = child.attrib["name"]
                 fields.append((
-                    child.attrib["name"],
+                    FIELD_ALIASES.get(raw, raw),
                     child.attrib["type"].split(":")[1]
                 ))
             else:
@@ -112,7 +120,7 @@ def parse_xsd(xsd_path):
                                     if inn_seq is not None:
                                         for sf in inn_seq.findall(XSD_NS + "element"):
                                             if "type" in sf.attrib:
-                                                fname = sf.attrib["name"]
+                                                fname = FIELD_ALIASES.get(sf.attrib["name"], sf.attrib["name"])
                                                 ftyp = sf.attrib["type"].split(":")[1]
                                                 fields.append((fname, ftyp))
                                                 inner_field_names.append(fname)
@@ -124,7 +132,7 @@ def parse_xsd(xsd_path):
                             # Flat subcategory with direct typed fields
                             for sf in inner_elements:
                                 if "type" in sf.attrib:
-                                    name = sf.attrib["name"]
+                                    name = FIELD_ALIASES.get(sf.attrib["name"], sf.attrib["name"])
                                     typ = sf.attrib["type"].split(":")[1]
                                     fields.append((name, typ))
                                     subcat_field_names.append(name)
@@ -1106,8 +1114,9 @@ def _gen_field_extract(lines, name, typ, prefix, PREFIX, tbl_var, idx="count"):
     ci = c_ident(name)
     ci_upper = ci.upper()
     enum_val = f"COL_{PREFIX}_{ci_upper}_{typ.upper()}"
+    xml_tag = c_ident(XML_FIELD_NAMES.get(name, name))  # use XSD alias if canonical was remapped
 
-    lines.append(f'    extract_tag(row_buf, "{ci}", buf, sizeof(buf));')
+    lines.append(f'    extract_tag(row_buf, "{xml_tag}", buf, sizeof(buf));')
     lines.append(f"    if (buf[0] && !validate_{prefix}_value({enum_val}, buf)) {{")
     lines.append(f"      pos = row_end + 6; continue;")
     lines.append(f"    }}")
@@ -1402,7 +1411,8 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                     ci = c_ident(fn)
                     ci_upper = ci.upper()
                     enum_val = f"COL_{PREFIX}_{ci_upper}_{typ.upper()}"
-                    lines.append(f'    extract_tag(row_buf, "{ci}", buf, sizeof(buf));')
+                    xml_tag = c_ident(XML_FIELD_NAMES.get(fn, fn))
+                    lines.append(f'    extract_tag(row_buf, "{xml_tag}", buf, sizeof(buf));')
                     lines.append(f"    if (buf[0] && !validate_{prefix}_value({enum_val}, buf)) {{")
                     lines.append(f"      pos = row_end + 6; continue;")
                     lines.append(f"    }}")
@@ -1441,7 +1451,8 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                         ci_upper = ci.upper()
                         enum_val = f"COL_{PREFIX_O}_{ci_upper}_{typ.upper()}"
                         temp = f"_t_{ci}"
-                        lines.append(f'    extract_tag(row_buf, "{ci}", buf, sizeof(buf));')
+                        xml_tag = c_ident(XML_FIELD_NAMES.get(fn, fn))
+                        lines.append(f'    extract_tag(row_buf, "{xml_tag}", buf, sizeof(buf));')
                         lines.append(f"    if (buf[0] && !validate_{prefix_o}_value({enum_val}, buf)) {{")
                         lines.append(f"      pos = row_end + 6; continue;")
                         lines.append(f"    }}")
