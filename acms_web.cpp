@@ -44,9 +44,18 @@ static volatile bool reload_variables_pending = false;
 static volatile bool reload_metadata_pending  = false;
 static volatile bool reload_settings_pending  = false;
 
-/* Handle to increment_task — captured at task creation so http_task can
- * suspend/resume it around table reloads to prevent SMP race conditions. */
-static TaskHandle_t increment_task_handle = NULL;
+/* Cooperative pause mechanism for table reloads.
+ *
+ * vTaskSuspend() is unsafe if the target task holds a mutex (deadlock risk).
+ * Instead, http_task sets increment_pause_req, then waits on increment_ack_sem.
+ * increment_task checks the flag at the START of each iteration — before any
+ * pool access — gives the ack semaphore, then blocks on increment_go_sem until
+ * http_task finishes modifying the tables and signals resume.
+ *
+ * Guaranteed safe: ack is given only at a point where no mutexes are held. */
+static volatile bool     increment_pause_req = false;
+static SemaphoreHandle_t increment_ack_sem   = NULL;   /* increment → http: "I'm paused" */
+static SemaphoreHandle_t increment_go_sem    = NULL;   /* http → increment: "resume"     */
 
 /* =========================================================
  * ADDRESS POOL (STABLE BACKING STORAGE FOR ext_addr)
@@ -305,29 +314,45 @@ static void http_task(void *pvParameters)
          * For standalone POSTs (no reboot) the reload runs normally here,
          * outside any handler context, safe from reentrancy issues. */
         if (!reboot_pending) {
+            bool need_pause = reload_metadata_pending || reload_variables_pending;
+
+            if (need_pause && increment_ack_sem && increment_go_sem) {
+                /* Ask increment_task to pause at its next safe checkpoint. */
+                increment_pause_req = true;
+                bool acked = (xSemaphoreTake(increment_ack_sem,
+                                             pdMS_TO_TICKS(3000)) == pdTRUE);
+                if (!acked) {
+                    /* Timeout — task didn't respond; abort reload to avoid deadlock. */
+                    increment_pause_req = false;
+                    Serial.println("[Reload] increment_task pause timeout — reload skipped");
+                    goto reload_done;
+                }
+            }
+
             if (reload_metadata_pending) {
                 reload_metadata_pending = false;
-                /* Suspend increment_task (Core 0) while modifying shared tables
-                 * to prevent a LoadStoreError SMP race condition. */
-                if (increment_task_handle) vTaskSuspend(increment_task_handle);
                 load_metadata_from_spiffs();
                 am_fault_map_build();
-                if (increment_task_handle) vTaskResume(increment_task_handle);
             }
             if (reload_variables_pending) {
                 reload_variables_pending = false;
-                if (increment_task_handle) vTaskSuspend(increment_task_handle);
                 load_variables_from_spiffs();
-                if (increment_task_handle) vTaskResume(increment_task_handle);
             }
+
+            if (need_pause && increment_ack_sem && increment_go_sem) {
+                increment_pause_req = false;
+                xSemaphoreGive(increment_go_sem);   /* release increment_task */
+            }
+
             if (reload_settings_pending) {
                 reload_settings_pending = false;
                 /* Settings reload only touches settings_* structs, not var_pool —
-                 * no need to suspend increment_task. */
+                 * no cooperative pause needed. */
                 load_settings_from_spiffs();
                 wifi_credentials_save(settings_general.SSID, settings_general.Password);
             }
         }
+        reload_done:
 
         if (reboot_pending && millis() >= reboot_at) {
             Serial.flush();   /* drain any buffered Serial output before reset */
@@ -356,6 +381,15 @@ static void increment_task(void *pvParameters)
     }
 
     for (;;) {
+        /* ── Cooperative pause point ──────────────────────────────────────────
+         * http_task sets increment_pause_req before modifying shared pools.
+         * We honour it HERE — before any pool access, no mutexes held — so
+         * vTaskSuspend is never needed and deadlock is impossible. */
+        if (increment_pause_req && increment_ack_sem && increment_go_sem) {
+            xSemaphoreGive(increment_ack_sem);              /* signal: now safe to reload */
+            xSemaphoreTake(increment_go_sem, portMAX_DELAY); /* wait:  until reload done  */
+        }
+
         for (int i = 0; i < increment_pool.count; i++) {
             increment_pool_row_t *r = &increment_pool.rows[i];
             if (r->value_ptr == NULL) continue;
@@ -552,7 +586,10 @@ void acms_system_init(const char *login_user, const char *login_pass)
 
   sync_all();
 
-  xTaskCreate(increment_task, "increment", 4096, NULL, 1, &increment_task_handle);
+  increment_ack_sem = xSemaphoreCreateBinary();
+  increment_go_sem  = xSemaphoreCreateBinary();
+
+  xTaskCreate(increment_task, "increment", 4096, NULL, 1, NULL);
   xTaskCreatePinnedToCore(http_task, "http", 8192, NULL, 10, NULL, 1);
 
   Serial.println("Variables registered");
