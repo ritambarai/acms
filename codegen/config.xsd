@@ -12,6 +12,7 @@
               <!-- ── header (UI-only controls, not persisted to Settings.xml) ── -->
               <xs:element name="header" minOccurs="0">
                 <xs:complexType><xs:sequence>
+                <xs:element name="Alert_Count:" type="xs:boolean"/>
                   <xs:element name="Download_a_Copy" type="xs:boolean" default="true"/>
                 </xs:sequence></xs:complexType>
               </xs:element>
@@ -23,7 +24,7 @@
                   <xs:element name="Password"        type="xs:string"/>
                   <xs:element name="Class_Pool_Size" type="xs:integer"/>
                   <xs:element name="Var_Pool_Size"   type="xs:integer"/>
-                  <xs:element name="Alert_cooldown"   type="xs:float"/>
+                  <xs:element name="Alert_Cooldown(mins)"   type="xs:float"/>
                 </xs:sequence></xs:complexType>
               </xs:element>
 
