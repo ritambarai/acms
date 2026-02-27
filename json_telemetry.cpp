@@ -104,7 +104,7 @@ void json_add_var(uint16_t var_idx)
      * otherwise build array by chaining constraints_id links. */
     obj.remove("constraint_id");
     if (settings_json_includes.Constraints && v->constraint_idx != INVALID_INDEX) {
-        JsonArray carr = obj["constraint_id"].to<JsonArray>();
+        JsonArray carr = obj["constraint"].to<JsonArray>();
         int cid = (int)v->constraint_idx;
         while (cid >= 0 && cid < variables_constraints_table.count) {
             variables_constraints_row_t *cr = &variables_constraints_table.rows[cid];
@@ -114,7 +114,7 @@ void json_add_var(uint16_t var_idx)
             elem["threshold"]    = buf;
             elem["operation_id"] = (int)cr->Operation_ID;
             elem["fault_code"]   = (int)cr->Fault_Code;
-            if (cr->Increment != 0.0f) {
+            if (cr->Increment != -9999.0f) {
                 snprintf(buf, sizeof(buf), "%.2f", cr->Increment);
                 elem["increment"] = buf;
             }
@@ -389,6 +389,53 @@ bool update_variable_telemetry(uint16_t var_idx,
                   "variable updated");
 
     return true;
+}
+
+/* =========================================================
+ * SEND ALERT JSON TO MQTT ALERT TOPIC
+ *
+ * Builds a compact JSON object describing the fired constraint
+ * and publishes it via mqtt_manager_publish_alert().
+ *
+ * dual mode  → goes to Alert_Topic on the dedicated alert client
+ * single mode→ goes to Data_Topic on the shared client
+ * ========================================================= */
+void json_send_alert(const char *class_name,
+                     const char *var_name,
+                     float       value,
+                     float       fault_code,
+                     float       threshold,
+                     float       operation_id)
+{
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("[MQTT] Not connected, alert dropped");
+        return;
+    }
+
+    if (!mqtt_manager_connected_alert()) {
+        Serial.println("[MQTT] Alert client not connected, alert dropped");
+        return;
+    }
+
+    StaticJsonDocument<256> alert;
+    char buf[32];
+
+    alert["class"]        = class_name   ? class_name  : "";
+    alert["name"]         = var_name     ? var_name    : "";
+    snprintf(buf, sizeof(buf), "%.2f", value);
+    alert["value"]        = buf;
+    alert["fault_code"]   = (int)fault_code;
+    snprintf(buf, sizeof(buf), "%.2f", threshold);
+    alert["threshold"]    = buf;
+    alert["operation_id"] = (int)operation_id;
+
+    String payload;
+    serializeJson(alert, payload);
+
+    Serial.printf("[MQTT] Alert: %s\n", payload.c_str());
+
+    bool ok = mqtt_manager_publish_alert(payload.c_str(), false);
+    if (!ok) Serial.println("[MQTT] Alert publish FAILED");
 }
 
 /* =========================================================

@@ -31,7 +31,10 @@ static bool      dns_running = false;
 
 /* ── MQTT ─────────────────────────────────────────────────────────── */
 static WiFiClient  espClient;
-PubSubClient       mqtt(espClient);
+static WiFiClient  espClientAlert;
+PubSubClient       mqtt(espClient);            /* data topic client       */
+PubSubClient       mqtt_alert(espClientAlert); /* alert topic client      */
+static bool        dual_mqtt = false;          /* true when topics differ */
 
 /* ── AP portal page — split so scan results can be injected ──── */
 static const char AP_PAGE_TOP[] PROGMEM = R"HTML(<!DOCTYPE html><html>
@@ -207,57 +210,121 @@ void wifi_manager_loop(void)
     if (dns_running) {
         dns_server.processNextRequest();
     }
-    if (mqtt.connected()) {
-        mqtt.loop();
-    } else {
+
+    /* Service keep-alive loops */
+    if (mqtt.connected())                      mqtt.loop();
+    if (dual_mqtt && mqtt_alert.connected())   mqtt_alert.loop();
+
+    /* Reconnect any dropped client every 30 s */
+    bool needs_reconnect = !mqtt.connected() || (dual_mqtt && !mqtt_alert.connected());
+    if (needs_reconnect) {
         static uint32_t last_reconnect = 0;
-        if (millis() - last_reconnect > 30000) {   /* retry every 30 s */
+        if (millis() - last_reconnect > 30000) {
             last_reconnect = millis();
             mqtt_manager_connect();
         }
     }
 }
 
-/* ── MQTT connect — single attempt, returns immediately on success or failure.
- *   Retries are scheduled by wifi_manager_loop() every 30 s so the HTTP server
- *   is never blocked for more than one TCP connect attempt (~1 s worst case). */
-void mqtt_manager_connect(void)
+/* ── helper: single connect attempt with credentials ── */
+static bool connect_mqtt_client(PubSubClient &client, const char *client_id)
 {
-    if (!settings_mqtt.Host || !settings_mqtt.Host[0]) return;  /* no server configured */
-
-    mqtt.setServer(settings_mqtt.Host, settings_mqtt.Port);
-    mqtt.setBufferSize(MQTT_BUFFER_SIZE);
-
-    /* Limit how long the TCP handshake can block the main loop. */
-    espClient.setTimeout(1000);   /* 1 s read/connect timeout */
-
-    Serial.print("[MQTT] Connecting to ");
-    Serial.print(settings_mqtt.Host);
-    Serial.print("...");
-
     bool ok;
     if (settings_mqtt.Mqtt_Username && settings_mqtt.Mqtt_Username[0]) {
         const char *user = settings_mqtt.Mqtt_Username;
         const char *pw   = (settings_mqtt.Mqtt_Password && settings_mqtt.Mqtt_Password[0])
                            ? settings_mqtt.Mqtt_Password : nullptr;
-        ok = mqtt.connect(MQTT_CLIENT_ID, user, pw);
+        ok = client.connect(client_id, user, pw);
     } else {
-        ok = mqtt.connect(MQTT_CLIENT_ID);
+        ok = client.connect(client_id);
     }
-    if (ok) {
+    return ok;
+}
+
+/* ── MQTT connect ──────────────────────────────────────────────────
+ * Cases:
+ *   neither topic set          → no-op (no broker needed)
+ *   both set AND different     → dual clients, unique client IDs
+ *   both same OR only one set  → single client, shared topic
+ *
+ * Single attempt per call; wifi_manager_loop() retries every 30 s. */
+void mqtt_manager_connect(void)
+{
+    if (!settings_mqtt.Host || !settings_mqtt.Host[0]) return;
+
+    const char *dt = (settings_mqtt.Data_Topic  && settings_mqtt.Data_Topic[0])
+                     ? settings_mqtt.Data_Topic  : nullptr;
+    const char *at = (settings_mqtt.Alert_Topic && settings_mqtt.Alert_Topic[0])
+                     ? settings_mqtt.Alert_Topic : nullptr;
+
+    /* Case: neither topic configured → nothing to connect for */
+    if (!dt && !at) return;
+
+    /* Determine mode */
+    if (dt && at && strcmp(dt, at) != 0) {
+        /* Both topics set and different → dual clients */
+        dual_mqtt = true;
+    } else {
+        /* Same topic, or only one is set → single client */
+        dual_mqtt = false;
+        if (!dt) dt = at;   /* only Alert_Topic configured → use it as data topic */
+    }
+
+    /* ── data client (always used) ── */
+    mqtt.setServer(settings_mqtt.Host, settings_mqtt.Port);
+    mqtt.setBufferSize(MQTT_BUFFER_SIZE);
+    espClient.setTimeout(1000);
+
+    Serial.printf("[MQTT] Connecting%s to %s...",
+                  dual_mqtt ? " data client" : "", settings_mqtt.Host);
+    if (connect_mqtt_client(mqtt, MQTT_CLIENT_ID)) {
         Serial.println(" connected");
     } else {
-        Serial.print(" failed rc=");
-        Serial.println(mqtt.state());
+        Serial.printf(" failed rc=%d\n", mqtt.state());
+    }
+
+    /* ── alert client (dual mode only) ── */
+    if (dual_mqtt) {
+        mqtt_alert.setServer(settings_mqtt.Host, settings_mqtt.Port);
+        mqtt_alert.setBufferSize(MQTT_BUFFER_SIZE);
+        espClientAlert.setTimeout(1000);
+
+        Serial.printf("[MQTT] Connecting alert client to %s...", settings_mqtt.Host);
+        if (connect_mqtt_client(mqtt_alert, MQTT_CLIENT_ID "_A")) {
+            Serial.println(" connected");
+        } else {
+            Serial.printf(" failed rc=%d\n", mqtt_alert.state());
+        }
     }
 }
 
+/* ── Publish to the data topic ── */
 bool mqtt_manager_publish(const char *topic, const char *payload, bool retain)
 {
+    return mqtt.publish(topic, payload, retain);
+}
+
+/* ── Publish to the alert topic ──────────────────────────────────
+ * dual mode  → uses dedicated alert client + Alert_Topic
+ * single mode→ uses data client + whichever topic is configured  */
+bool mqtt_manager_publish_alert(const char *payload, bool retain)
+{
+    if (dual_mqtt) {
+        return mqtt_alert.publish(settings_mqtt.Alert_Topic, payload, retain);
+    }
+    /* Single client: pick whichever topic is set */
+    const char *topic = (settings_mqtt.Data_Topic && settings_mqtt.Data_Topic[0])
+                        ? settings_mqtt.Data_Topic
+                        : settings_mqtt.Alert_Topic;
     return mqtt.publish(topic, payload, retain);
 }
 
 bool mqtt_manager_connected(void)
 {
     return mqtt.connected();
+}
+
+bool mqtt_manager_connected_alert(void)
+{
+    return dual_mqtt ? mqtt_alert.connected() : mqtt.connected();
 }

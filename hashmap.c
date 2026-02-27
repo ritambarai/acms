@@ -318,6 +318,66 @@ bool dm_addr_map_delete(const void *addr)
 }
 
 /* ============================================================
+ *  FAULT-CODE MAP
+ * ============================================================ */
+
+typedef struct {
+    float       key;
+    const char *msg;
+    map_state_t state;
+} fault_map_entry_t;
+
+static fault_map_entry_t fault_map[FAULT_MAP_SIZE];
+
+/* Fault codes are integer-valued floats; cast to int32_t for stable hashing */
+static uint32_t hash_fault(float f)
+{
+    uint32_t h = (uint32_t)(int32_t)f;
+    h ^= h >> 16;
+    h *= 0x7feb352du;
+    h ^= h >> 15;
+    return h;
+}
+
+void am_fault_map_clear(void)
+{
+    memset(fault_map, 0, sizeof(fault_map));
+}
+
+void am_fault_map_insert(float fault_code, const char *message)
+{
+    uint32_t b = hash_fault(fault_code) & (FAULT_MAP_SIZE - 1);
+    for (uint32_t i = 0; i < FAULT_MAP_SIZE; i++) {
+        uint32_t p = (b + i) & (FAULT_MAP_SIZE - 1);
+        if (fault_map[p].state == MAP_USED &&
+            (int32_t)fault_map[p].key == (int32_t)fault_code) {
+            fault_map[p].msg = message;   /* update existing */
+            return;
+        }
+        if (fault_map[p].state != MAP_USED) {
+            fault_map[p].key   = fault_code;
+            fault_map[p].msg   = message;
+            fault_map[p].state = MAP_USED;
+            return;
+        }
+    }
+    /* table full — silently drop (FAULT_MAP_SIZE should be ≥ 2× entries) */
+}
+
+const char *am_fault_map_find(float fault_code)
+{
+    uint32_t b = hash_fault(fault_code) & (FAULT_MAP_SIZE - 1);
+    for (uint32_t i = 0; i < FAULT_MAP_SIZE; i++) {
+        uint32_t p = (b + i) & (FAULT_MAP_SIZE - 1);
+        if (fault_map[p].state == MAP_EMPTY) return NULL;
+        if (fault_map[p].state == MAP_USED &&
+            (int32_t)fault_map[p].key == (int32_t)fault_code)
+            return fault_map[p].msg;
+    }
+    return NULL;
+}
+
+/* ============================================================
  *  GLOBAL COMMIT
  * ============================================================ */
 
