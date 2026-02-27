@@ -23,6 +23,7 @@
                   <xs:element name="Password"        type="xs:string"/>
                   <xs:element name="Class_Pool_Size" type="xs:integer"/>
                   <xs:element name="Var_Pool_Size"   type="xs:integer"/>
+                  <xs:element name="Alert_cooldown"   type="xs:float"/>
                 </xs:sequence></xs:complexType>
               </xs:element>
 
@@ -33,8 +34,8 @@
                   <xs:element name="Port"          type="xs:integer"/>
                   <xs:element name="Data_Topic"    type="xs:string"/>
                   <xs:element name="Alert_Topic"   type="xs:string"/>
-                  <xs:element name="Username"      type="xs:string"/>
-                  <xs:element name="Password" type="xs:string"/>
+                  <xs:element name="Mqtt_Username" type="xs:string"/>
+                  <xs:element name="Mqtt_Password" type="xs:string"/>
                 </xs:sequence></xs:complexType>
               </xs:element>
 

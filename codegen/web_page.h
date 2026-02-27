@@ -371,6 +371,11 @@ button {
           <input placeholder="integer" data-type="integer" data-name="Var_Pool_Size" max="256" oninput="validateField(this); settingsChanged()">
           <span class="error-msg"></span>
         </div>
+        <div class="field">
+          <label>Alert cooldown</label>
+          <input placeholder="float" data-type="float" data-name="Alert_cooldown" oninput="validateField(this); settingsChanged()">
+          <span class="error-msg"></span>
+        </div>
       </div>
     </div>
     <div class="subcat-row">
@@ -621,11 +626,11 @@ var Variables_SCHEMA = [
 var TABLE_LIST = ["Metadata", "Variables"];
 
 var Settings_SUBCATS = {
-  "general": ["SSID", "Password", "Class_Pool_Size", "Var_Pool_Size"],
+  "general": ["SSID", "Password", "Class_Pool_Size", "Var_Pool_Size", "Alert_cooldown"],
   "mqtt": ["Host", "Port", "Data_Topic", "Alert_Topic", "Mqtt_Username", "Mqtt_Password"],
   "json includes": ["Metadata", "Constraints", "Type_Unit"]
 };
-var Settings_TABLE_COLS = ["SSID", "Password", "Class_Pool_Size", "Var_Pool_Size", "Host", "Port", "Data_Topic", "Alert_Topic", "Mqtt_Username", "Mqtt_Password", "Metadata", "Constraints", "Type_Unit"];
+var Settings_TABLE_COLS = ["SSID", "Password", "Class_Pool_Size", "Var_Pool_Size", "Alert_cooldown", "Host", "Port", "Data_Topic", "Alert_Topic", "Mqtt_Username", "Mqtt_Password", "Metadata", "Constraints", "Type_Unit"];
 
 
 /* ======== PRELOADED XML (embedded at build time) ======== */

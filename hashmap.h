@@ -18,14 +18,8 @@
 #define ADDR_MAP_SIZE   (2 * MAX_VAR_POOL_CAP)
 
 /* Runtime-effective pool sizes — wired to settings_schema via data_manager.c */
-#ifdef __cplusplus
-extern "C" {
-#endif
 int32_t dm_max_class(void);
 int32_t dm_max_var(void);
-#ifdef __cplusplus
-}
-#endif
 
 /* These now return the runtime-configured values (fall back to caps if unset) */
 #define MAX_CLASS   dm_max_class()
@@ -54,6 +48,10 @@ typedef enum {
     MAPF_ADDR  = 1u << 2
 } map_create_flags_t;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* ============================================================
  *  INIT
  * ============================================================ */
@@ -79,7 +77,7 @@ bool dm_class_map_delete(const char *class_name);
  *  VAR MAP : (class_idx, var_name) → var_idx
  * ============================================================ */
 
-uint16_t dm_var_map_find(uint16_t class_idx, const char *var_name,const char *var_type);
+uint16_t dm_var_map_find(uint16_t class_idx, const char *var_name, const char *var_type);
 
 void dm_var_map_prepare(uint16_t class_idx,
                         const char *var_name,
@@ -122,5 +120,9 @@ void dm_maps_commit_all(map_create_flags_t flags);
 void        am_fault_map_clear(void);
 void        am_fault_map_insert(float fault_code, const char *message);
 const char *am_fault_map_find(float fault_code);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* HASHMAP_H */

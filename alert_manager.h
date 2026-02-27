@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <time.h>
 #include "hashmap.h"   /* INVALID_INDEX */
 
 #ifdef __cplusplus
@@ -15,12 +16,6 @@ extern "C" {
 
 #define MAX_ALERT_QUEUE  64   /* ring-buffer capacity */
 
-/* Minimum MINUTES between consecutive alerts with the same var_idx + fault_code.
- *
- *  > 0          : suppress if elapsed < ALERT_DEDUP_MIN_MINUTES minutes since last match
- *  0            : no deduplication — every trigger is enqueued
- *  negative / INVALID_INDEX (0xFFFF) : always suppress duplicates (infinite cooldown) */
-#define ALERT_DEDUP_MIN_MINUTES  1
 
 /* ============================================================
  *  ALERT ENTRY STRUCTURE
