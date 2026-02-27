@@ -536,8 +536,8 @@ button {
       <span class="error-msg"></span>
     </div>
     <div class="field">
-      <label>Type</label>
-      <input placeholder="string" data-type="string" data-name="Type" oninput="validateField(this); var vi=document.getElementById('Variables_form').querySelector('[data-field=Value]'); if(vi) validateValidityField(vi); var ni=document.getElementById('Variables_form').querySelector('[data-field=Name]'); if(ni) validateValidityField(ni)">
+      <label>Category</label>
+      <input placeholder="string" data-type="string" data-name="Category" oninput="validateField(this); var vi=document.getElementById('Variables_form').querySelector('[data-field=Value]'); if(vi) validateValidityField(vi); var ni=document.getElementById('Variables_form').querySelector('[data-field=Name]'); if(ni) validateValidityField(ni)">
       <span class="error-msg"></span>
     </div>
     <div class="field">
@@ -606,7 +606,7 @@ button {
       <th class="row-actions-left"></th>
       <th>Class</th>
       <th>Name</th>
-      <th>Type</th>
+      <th>Category</th>
       <th>Value</th>
       <th>Slave_ID</th>
       <th>Function_ID</th>
@@ -639,7 +639,7 @@ var Metadata_SCHEMA = [
 var Variables_SCHEMA = [
   { name:"Class", type:"string" },
   { name:"Name", type:"string" },
-  { name:"Type", type:"string" },
+  { name:"Category", type:"string" },
   { name:"Value", type:"float" },
   { name:"Slave_ID", type:"float" },
   { name:"Function_ID", type:"float" },
@@ -752,7 +752,7 @@ function insertRow(table, schema) {
       const savedField = el.dataset.field || "";
       const fId = table + "_form";
       const inp2 = document.createElement("input");
-      inp2.dataset.name = "Type";
+      inp2.dataset.name = "Category";
       inp2.dataset.type = savedType;
       inp2.placeholder = savedType;
       if (savedField) inp2.dataset.field = savedField;
@@ -803,7 +803,7 @@ function renderTable(table, schema) {
   } else if (table === "Variables") {
     const ci = schema.findIndex(f => f.name === "Class");
     const ni = schema.findIndex(f => f.name === "Name");
-    const ti = schema.findIndex(f => f.name === "Type");
+    const ti = schema.findIndex(f => f.name === "Category");
     state[table].sort((a, b) =>
       _cmp(a[ci] ?? "", b[ci] ?? "") ||
       _cmp(a[ni] ?? "", b[ni] ?? "") ||
@@ -869,7 +869,7 @@ function renderTable(table, schema) {
 
   const _gci = schema.findIndex(f => f.name === "Class");
   const _gni = (table === "Variables") ? schema.findIndex(f => f.name === "Name") : -1;
-  const _gti = (table === "Variables") ? schema.findIndex(f => f.name === "Type") : -1;
+  const _gti = (table === "Variables") ? schema.findIndex(f => f.name === "Category") : -1;
   function _groupKey(r) {
     const cls = _gci >= 0 ? (r[_gci] ?? "") : "";
     const nam = _gni >= 0 ? (r[_gni] ?? "") : "";
@@ -1520,7 +1520,7 @@ function buildVariableDict() {
   for (var i = 0; i < schema.length; i++) {
     if (schema[i].name === "Class") classIdx = i;
     else if (schema[i].name === "Name") nameIdx = i;
-    else if (schema[i].name === "Type") typeIdx = i;
+    else if (schema[i].name === "Category") typeIdx = i;
   }
   if (classIdx < 0 || nameIdx < 0 || typeIdx < 0) return dict;
   state["Variables"].forEach(function(row) {
@@ -1548,7 +1548,7 @@ function _typeFieldSet(nameInput, asDropdown, opts) {
   opts = opts || ["type", "unit"];
   var form = nameInput.closest('[id$="_form"]');
   if (!form) return;
-  var typeEl = form.querySelector('[data-name="Type"]');
+  var typeEl = form.querySelector('[data-name="Category"]');
   if (!typeEl) return;
   var isSelect = typeEl.tagName === "SELECT";
   if (asDropdown && isSelect) {
@@ -1563,7 +1563,7 @@ function _typeFieldSet(nameInput, asDropdown, opts) {
   var savedType  = typeEl.dataset.type  || "string";
   if (asDropdown) {
     var sel = document.createElement("select");
-    sel.dataset.name = "Type";
+    sel.dataset.name = "Category";
     sel.dataset.type = savedType;
     sel.dataset.opts = opts.slice().sort().join(",");
     var emptyOpt = document.createElement("option");
@@ -1584,7 +1584,7 @@ function _typeFieldSet(nameInput, asDropdown, opts) {
     parent.replaceChild(sel, typeEl);
   } else {
     var inp = document.createElement("input");
-    inp.dataset.name = "Type";
+    inp.dataset.name = "Category";
     inp.dataset.type = savedType;
     inp.placeholder = savedType;
     if (savedField) inp.dataset.field = savedField;
@@ -1640,7 +1640,7 @@ function validateValidityField(input) {
   /* ── Name field: stepped check using nested Variable dict ── */
   if (fieldName === "Name") {
     var form = input.closest('[id$="_form"]');
-    var typeInput = form ? form.querySelector('[data-name="Type"]') : null;
+    var typeInput = form ? form.querySelector('[data-name="Category"]') : null;
     var typeVal = typeInput ? typeInput.value.trim().toLowerCase() : "";
     var half = input.closest(".half");
     var insertBtn = half ? half.querySelector(".insert-btn") : null;
@@ -1773,7 +1773,7 @@ function validateValidityField(input) {
   var classKey = fieldName;
   if (fieldName === "Value") {
     var form = input.closest("[id$=\"_form\"]");
-    var typeInput = form.querySelector('[data-name="Type"]');
+    var typeInput = form.querySelector('[data-name="Category"]');
     var typeVal = typeInput ? typeInput.value.trim().toLowerCase() : "";
 
     if (typeVal === "unit") {

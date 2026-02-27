@@ -283,7 +283,7 @@ bool dm_set_value(const variables_description_row_t *row, void *ext_addr)
 {
     const char *class_name     = row->Class;
     const char *var_name       = row->Name;
-    const char *type           = row->Type;
+    const char *type           = row->Category;
     float       value          = row->Value;
     uint16_t    constraint_idx = (row->constraint_id >= 0)
                                  ? (uint16_t)row->constraint_id

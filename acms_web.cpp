@@ -233,7 +233,7 @@ static void suspend_all_tasks(void)
         xSemaphoreTake(increment_go_sem,  0);   /* drain stale token */
 
         increment_pause_req = true;
-        if (xSemaphoreTake(increment_ack_sem, pdMS_TO_TICKS(5000)) == pdTRUE) {
+        if (xSemaphoreTake(increment_ack_sem, pdMS_TO_TICKS(15000)) == pdTRUE) {
             /* Task is now blocked on go_sem — stays paused until reboot. */
             Serial.println("[Submit] increment_task safely paused");
         } else {
@@ -551,10 +551,10 @@ void acms_system_init(const char *login_user, const char *login_pass)
 
   Serial.printf("\n=== Variables Description Table (%d rows) ===\n", variables_description_table.count);
   for (int i = 0; i < variables_description_table.count; i++) {
-    Serial.printf("  [%d] Class=%s  Name=%s  Type=%s  Value=%.4f  constraint_id=%d\n", i,
-      variables_description_table.rows[i].Class ? variables_description_table.rows[i].Class : "(null)",
-      variables_description_table.rows[i].Name  ? variables_description_table.rows[i].Name  : "(null)",
-      variables_description_table.rows[i].Type  ? variables_description_table.rows[i].Type  : "(null)",
+    Serial.printf("  [%d] Class=%s  Name=%s  Category=%s  Value=%.4f  constraint_id=%d\n", i,
+      variables_description_table.rows[i].Class    ? variables_description_table.rows[i].Class    : "(null)",
+      variables_description_table.rows[i].Name     ? variables_description_table.rows[i].Name     : "(null)",
+      variables_description_table.rows[i].Category ? variables_description_table.rows[i].Category : "(null)",
       variables_description_table.rows[i].Value,
       variables_description_table.rows[i].constraint_id);
   }
