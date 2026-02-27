@@ -34,13 +34,13 @@ static void dm_test_basic(void)
         variables_description_row_t row;
         row.constraint_id = -1;
 
-        row.Class = "sensor"; row.Name = "temperature"; row.Type = "float"; row.Value = temperature;
+        row.Class = "sensor"; row.Name = "temperature"; row.Category = "float"; row.Value = temperature;
         dm_set_value(&row, &temperature);
 
-        row.Class = "sensor"; row.Name = "humidity"; row.Type = "float"; row.Value = humidity;
+        row.Class = "sensor"; row.Name = "humidity"; row.Category = "float"; row.Value = humidity;
         dm_set_value(&row, &humidity);
 
-        row.Class = "sensor"; row.Name = "pressure"; row.Type = "float"; row.Value = pressure;
+        row.Class = "sensor"; row.Name = "pressure"; row.Category = "float"; row.Value = pressure;
         dm_set_value(&row, &pressure);
     }
 
@@ -53,7 +53,7 @@ static void dm_test_basic(void)
     get_value(&temperature);
     {
         variables_description_row_t row;
-        row.Class = "sensor"; row.Name = "temperature"; row.Type = "float";
+        row.Class = "sensor"; row.Name = "temperature"; row.Category = "float";
         row.Value = temperature; row.constraint_id = -1;
         dm_set_value(&row, &temperature);
     }
@@ -70,7 +70,7 @@ static void dm_test_basic(void)
      * -------------------------------------------------------- */
     {
         variables_description_row_t row;
-        row.Class = "power"; row.Name = "voltage"; row.Type = "float";
+        row.Class = "power"; row.Name = "voltage"; row.Category = "float";
         row.Value = voltage; row.constraint_id = -1;
         dm_set_value(&row, &voltage);
     }
@@ -111,7 +111,7 @@ static void dm_test_basic(void)
     sync_class(sensor_idx);
     {
         variables_description_row_t row;
-        row.Class = "sensor"; row.Name = "status"; row.Type = "bool";
+        row.Class = "sensor"; row.Name = "status"; row.Category = "bool";
         row.Value = status; row.constraint_id = 0;
         dm_set_value(&row, &status);
     }

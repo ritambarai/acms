@@ -86,7 +86,7 @@ function buildVariableDict() {
   for (var i = 0; i < schema.length; i++) {
     if (schema[i].name === "Class") classIdx = i;
     else if (schema[i].name === "Name") nameIdx = i;
-    else if (schema[i].name === "Type") typeIdx = i;
+    else if (schema[i].name === "Category") typeIdx = i;
   }
   if (classIdx < 0 || nameIdx < 0 || typeIdx < 0) return dict;
   state["Variables"].forEach(function(row) {
@@ -114,7 +114,7 @@ function _typeFieldSet(nameInput, asDropdown, opts) {
   opts = opts || ["type", "unit"];
   var form = nameInput.closest('[id$="_form"]');
   if (!form) return;
-  var typeEl = form.querySelector('[data-name="Type"]');
+  var typeEl = form.querySelector('[data-name="Category"]');
   if (!typeEl) return;
   var isSelect = typeEl.tagName === "SELECT";
   if (asDropdown && isSelect) {
@@ -129,7 +129,7 @@ function _typeFieldSet(nameInput, asDropdown, opts) {
   var savedType  = typeEl.dataset.type  || "string";
   if (asDropdown) {
     var sel = document.createElement("select");
-    sel.dataset.name = "Type";
+    sel.dataset.name = "Category";
     sel.dataset.type = savedType;
     sel.dataset.opts = opts.slice().sort().join(",");
     var emptyOpt = document.createElement("option");
@@ -150,7 +150,7 @@ function _typeFieldSet(nameInput, asDropdown, opts) {
     parent.replaceChild(sel, typeEl);
   } else {
     var inp = document.createElement("input");
-    inp.dataset.name = "Type";
+    inp.dataset.name = "Category";
     inp.dataset.type = savedType;
     inp.placeholder = savedType;
     if (savedField) inp.dataset.field = savedField;
@@ -206,7 +206,7 @@ function validateValidityField(input) {
   /* ── Name field: stepped check using nested Variable dict ── */
   if (fieldName === "Name") {
     var form = input.closest('[id$="_form"]');
-    var typeInput = form ? form.querySelector('[data-name="Type"]') : null;
+    var typeInput = form ? form.querySelector('[data-name="Category"]') : null;
     var typeVal = typeInput ? typeInput.value.trim().toLowerCase() : "";
     var half = input.closest(".half");
     var insertBtn = half ? half.querySelector(".insert-btn") : null;
@@ -339,7 +339,7 @@ function validateValidityField(input) {
   var classKey = fieldName;
   if (fieldName === "Value") {
     var form = input.closest("[id$=\"_form\"]");
-    var typeInput = form.querySelector('[data-name="Type"]');
+    var typeInput = form.querySelector('[data-name="Category"]');
     var typeVal = typeInput ? typeInput.value.trim().toLowerCase() : "";
 
     if (typeVal === "unit") {

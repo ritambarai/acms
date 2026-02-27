@@ -61,7 +61,7 @@ static inline bool validate_metadata_value(metadata_col_type_t type, const char 
 typedef enum {
   COL_VARIABLES_DESCRIPTION_CLASS_STRING,
   COL_VARIABLES_DESCRIPTION_NAME_STRING,
-  COL_VARIABLES_DESCRIPTION_TYPE_STRING,
+  COL_VARIABLES_DESCRIPTION_CATEGORY_STRING,
   COL_VARIABLES_DESCRIPTION_VALUE_FLOAT,
 } variables_description_col_type_t;
 
@@ -70,18 +70,18 @@ typedef enum {
 static const variables_description_col_type_t variables_description_column_types[VARIABLES_DESCRIPTION_COL_COUNT] = {
   COL_VARIABLES_DESCRIPTION_CLASS_STRING,
   COL_VARIABLES_DESCRIPTION_NAME_STRING,
-  COL_VARIABLES_DESCRIPTION_TYPE_STRING,
+  COL_VARIABLES_DESCRIPTION_CATEGORY_STRING,
   COL_VARIABLES_DESCRIPTION_VALUE_FLOAT,
 };
 
 static const char *variables_description_column_names[VARIABLES_DESCRIPTION_COL_COUNT] = {
-  "Class", "Name", "Type", "Value"
+  "Class", "Name", "Category", "Value"
 };
 
 typedef struct {
   char* Class;
   char* Name;
-  char* Type;
+  char* Category;
   float Value;
   int constraint_id;   /* index into constraints table, -1 if no constraints row */
 } variables_description_row_t;

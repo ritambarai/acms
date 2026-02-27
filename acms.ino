@@ -78,13 +78,10 @@ void setup()
         wifi_manager_init(settings_general.SSID, settings_general.Password);
     }
 
+    mqtt_manager_connect();
+
     /* ---------------- System init ---------------- */
     acms_system_init(WEB_USER, WEB_PASSWORD);
-
-    /* Connect MQTT only after full system init so the first mqtt.loop()
-     * (called from wifi_manager_loop in loop()) runs almost immediately,
-     * preventing the broker from dropping the connection on keepalive timeout. */
-    mqtt_manager_connect();
 
     modbus_setup();
 }

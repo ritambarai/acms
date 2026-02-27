@@ -10,7 +10,7 @@ extern "C" {
 #include "schema.h"   /* settings_mqtt_t settings_mqtt */
 }
 
-StaticJsonDocument<12288> doc;  // 12 KB
+DynamicJsonDocument doc(12288);  // heap-allocated — keeps 12 KB out of BSS
 static const char *api_url = "https://acms-sustlabs.vercel.app/api/data";
 static const char *CMD_URL  = "https://acms-sustlabs.vercel.app/api/cmd";
 
@@ -158,6 +158,17 @@ void json_remove_var(uint16_t var_idx)
  * -------------------------------------------------------- */
 void json_send(void)
 {
+    /* Rate-limit: sync_all() calls json_send() once per dirty class, so back-
+     * to-back calls are common.  PubSubClient's TCP write buffer cannot absorb
+     * two 5 KB payloads without mqtt.loop() flushing between them — the second
+     * publish would fail and may block, delaying increment_task long enough to
+     * trigger the cooperative-pause timeout and a force-suspend during SPIFFS
+     * access → abort().  Allow at most one publish per 500 ms. */
+    static uint32_t last_pub_ms = 0;
+    uint32_t now = millis();
+    if (now - last_pub_ms < 500) return;
+    last_pub_ms = now;   /* claim the slot immediately — blocks any concurrent/sequential call */
+
     if (WiFi.status() != WL_CONNECTED) {
         Serial.println("[WiFi] Not connected, JSON dropped");
         return;
@@ -176,10 +187,10 @@ void json_send(void)
     String payload;
     serializeJson(doc, payload);
 
-    Serial.println("[MQTT] Publishing JSON:");
-    Serial.println(payload);
-    Serial.print("[MQTT] Payload size: ");
-    Serial.println(payload.length());
+    //Serial.println("[MQTT] Publishing JSON:");
+    //Serial.println(payload);
+    //Serial.print("[MQTT] Payload size: ");
+    //Serial.println(payload.length());
 
     bool ok = mqtt_manager_publish(settings_mqtt.Data_Topic, payload.c_str(), true);
 
@@ -506,7 +517,7 @@ void json_receive(void)
         variables_description_row_t new_row;
         new_row.Class         = (char*)cls;
         new_row.Name          = (char*)var;
-        new_row.Type          = (char*)type;
+        new_row.Category      = (char*)type;
         new_row.Value         = value;
         new_row.constraint_id = (cid == INVALID_INDEX) ? -1 : (int)cid;
         if (!dm_set_value(&new_row, ext)) {

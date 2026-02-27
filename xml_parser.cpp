@@ -86,9 +86,9 @@ static int parse_metadata_xml(const char *xml, metadata_table_t *tbl) {
     }
     tbl->rows[count].Message = buf[0] ? strdup(buf) : NULL;
 
-    row.Name  = tbl->rows[count].Class;
-    row.Type  = tbl->rows[count].Message;
-    row.Value = tbl->rows[count].Key;
+    row.Name     = tbl->rows[count].Class;
+    row.Category = tbl->rows[count].Message;
+    row.Value    = tbl->rows[count].Key;
     dm_set_value(&row, &tbl->rows[count].Key);
 
     Serial.printf("[%d] Class=%s  Key=%.2f  Message=%s\n", count, tbl->rows[count].Class ? tbl->rows[count].Class : "(null)", tbl->rows[count].Key, tbl->rows[count].Message ? tbl->rows[count].Message : "(null)");
@@ -154,7 +154,7 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
     /* ── description: extract into temps for hashmap pre-check ── */
     char _t_Class[256] = "";
     char _t_Name[256] = "";
-    char _t_Type[256] = "";
+    char _t_Category[256] = "";
     float _t_Value = -9999.0f;
 
     extract_tag(row_buf, "Class", buf, sizeof(buf));
@@ -172,11 +172,11 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
     else _t_Name[0] = '\0';
 
     extract_tag(row_buf, "Category", buf, sizeof(buf));
-    if (buf[0] && !validate_variables_description_value(COL_VARIABLES_DESCRIPTION_TYPE_STRING, buf)) {
+    if (buf[0] && !validate_variables_description_value(COL_VARIABLES_DESCRIPTION_CATEGORY_STRING, buf)) {
       pos = row_end + 6; continue;
     }
-    if (buf[0]) { strncpy(_t_Type, buf, sizeof(_t_Type)-1); _t_Type[sizeof(_t_Type)-1] = '\0'; }
-    else _t_Type[0] = '\0';
+    if (buf[0]) { strncpy(_t_Category, buf, sizeof(_t_Category)-1); _t_Category[sizeof(_t_Category)-1] = '\0'; }
+    else _t_Category[0] = '\0';
 
     extract_tag(row_buf, "Value", buf, sizeof(buf));
     if (buf[0] && !validate_variables_description_value(COL_VARIABLES_DESCRIPTION_VALUE_FLOAT, buf)) {
@@ -241,16 +241,16 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
     /* ── hashmap lookup using temps: check if var already registered ── */
     uint16_t _cls_idx = INVALID_INDEX;
     uint16_t _var_pool_id = INVALID_INDEX;
-    if (_t_Class[0] && _t_Name[0] && _t_Type[0]) {
+    if (_t_Class[0] && _t_Name[0] && _t_Category[0]) {
       _cls_idx = dm_class_map_find(_t_Class);
       if (_cls_idx != INVALID_INDEX)
-        _var_pool_id = dm_var_map_find(_cls_idx, _t_Name, _t_Type);
+        _var_pool_id = dm_var_map_find(_cls_idx, _t_Name, _t_Category);
     }
     if (_var_pool_id == INVALID_INDEX) {
       /* copy temps → desc row (only for new vars) */
       description_tbl->rows[description_count].Class = _t_Class[0] ? strdup(_t_Class) : NULL;
       description_tbl->rows[description_count].Name = _t_Name[0] ? strdup(_t_Name) : NULL;
-      description_tbl->rows[description_count].Type = _t_Type[0] ? strdup(_t_Type) : NULL;
+      description_tbl->rows[description_count].Category = _t_Category[0] ? strdup(_t_Category) : NULL;
       description_tbl->rows[description_count].Value = _t_Value;
 
       if (_t_Slave_ID != -9999.0f || _t_Function_ID != -9999.0f || _t_Start_Address != -9999.0f || _t_Data_Length != -9999.0f) {
@@ -293,7 +293,7 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
       {
         uint16_t _new_cls = dm_class_map_find(description_tbl->rows[description_count].Class);
         if (_new_cls != INVALID_INDEX) {
-          uint16_t _new_vid = dm_var_map_find(_new_cls, description_tbl->rows[description_count].Name, description_tbl->rows[description_count].Type);
+          uint16_t _new_vid = dm_var_map_find(_new_cls, description_tbl->rows[description_count].Name, description_tbl->rows[description_count].Category);
           if (_new_vid != INVALID_INDEX && description_tbl->rows[description_count].constraint_id != -1)
             var_pool[_new_vid].constraint_idx = description_tbl->rows[description_count].constraint_id;
         }
@@ -355,7 +355,7 @@ static int parse_variables_xml(const char *xml, variables_description_table_t *d
   Serial.printf("[Variables] total rows: %d  modbus: %d  constraints: %d\n", description_count, modbus_count, constraints_count);
   /* ── post-parse: full desc table with complete constraint chains ── */
   for (int _i = 0; _i < description_count; _i++) {
-    Serial.printf("[%d] Class=%s  Name=%s  Type=%s  Value=%.4f  constraint_id=%d\n", _i, description_tbl->rows[_i].Class ? description_tbl->rows[_i].Class : "(null)", description_tbl->rows[_i].Name ? description_tbl->rows[_i].Name : "(null)", description_tbl->rows[_i].Type ? description_tbl->rows[_i].Type : "(null)", description_tbl->rows[_i].Value, description_tbl->rows[_i].constraint_id);
+    Serial.printf("[%d] Class=%s  Name=%s  Category=%s  Value=%.4f  constraint_id=%d\n", _i, description_tbl->rows[_i].Class ? description_tbl->rows[_i].Class : "(null)", description_tbl->rows[_i].Name ? description_tbl->rows[_i].Name : "(null)", description_tbl->rows[_i].Category ? description_tbl->rows[_i].Category : "(null)", description_tbl->rows[_i].Value, description_tbl->rows[_i].constraint_id);
     {
       int _cid = description_tbl->rows[_i].constraint_id;
       while (_cid != -1) {
@@ -373,7 +373,7 @@ void free_variables_description_table(variables_description_table_t *tbl) {
   for (int i = 0; i < tbl->count; i++) {
     if (tbl->rows[i].Class) { free(tbl->rows[i].Class); tbl->rows[i].Class = NULL; }
     if (tbl->rows[i].Name) { free(tbl->rows[i].Name); tbl->rows[i].Name = NULL; }
-    if (tbl->rows[i].Type) { free(tbl->rows[i].Type); tbl->rows[i].Type = NULL; }
+    if (tbl->rows[i].Category) { free(tbl->rows[i].Category); tbl->rows[i].Category = NULL; }
   }
   tbl->count = 0;
 }

@@ -421,7 +421,7 @@ void alert_mqtt_task_start(void)
         "alert_mqtt",
         4096,           /* stack words */
         NULL,
-        2,              /* priority — above idle, below increment_task */
+        4,              /* priority — above modbus(3) and increment(1), below http(10) */
         &alert_publish_task_handle,
         1);             /* Core 1 — same as http_task; no shared-data race with Core 0 */
 
