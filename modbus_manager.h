@@ -65,12 +65,12 @@ extern uint16_t Data_Size;            /* count of values in last frame */
  *  PUBLIC API
  * ══════════════════════════════════════════════════════════════ */
 
-/* Call once from setup() */
+/* Call once from setup() — inits UART and DE/RE pin. */
 void modbus_setup(void);
 
-/* modbus_setup() starts an internal FreeRTOS task that cycles through every
- * row in variables_modbus_table, blocking only within its own task stack so
- * the main loop / web server are never interrupted. */
+/* Poll every row in variables_modbus_table once (blocking, no sync/delay).
+ * Called by the combined poll_task in acms_web.cpp. */
+void modbus_poll_all_rows(void);
 
 /* Send an ad-hoc Modbus query (master mode).
  * modbus_loop() will parse the response on the next frame. */

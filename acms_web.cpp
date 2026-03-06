@@ -10,6 +10,7 @@ extern "C" {
   #include "alert_manager.h"
 }
 #include "network_manager.h"
+#include "modbus_manager.h"
 #include "json_telemetry.h"
 #include "acms_web.h"
 #include "web_page.h"
@@ -84,7 +85,12 @@ static bool require_auth() {
   return true;
 }
 
-/* ── GET / → serve web page from PROGMEM ── */
+/* ── GET / ─────────────────────────────────────────────────────────────────
+ * Serve the static web page from flash.  The browser then fetches
+ * /Variables.xml, /Metadata.xml, and /Settings.xml sequentially via JS to
+ * populate all tables — sequential so the single-threaded WebServer is never
+ * hit with concurrent requests.
+ * ──────────────────────────────────────────────────────────────────────── */
 static void handle_root() {
   if (!require_auth()) return;
   Serial.println("HTTP GET /");
@@ -211,7 +217,6 @@ static void handle_post_xml() {
   f.close();
   Serial.println("  Saved to SPIFFS");
 
-  /* Respond immediately — before any reload or MQTT publish. */
   server.send(200, "text/plain", "OK");
   reload_settings_pending = true;
 }
@@ -252,6 +257,7 @@ static void suspend_all_tasks(void)
         Serial.println("[Submit] alert_publish_task suspended");
     }
 }
+
 
 /* ── Streaming upload handler for large table XMLs (Variables, Metadata).
  * Writes each multipart chunk directly to SPIFFS so the entire body never
@@ -295,6 +301,7 @@ static void handle_post_table_xml() {
   server.send(200, "text/plain", "OK");
 }
 
+
 /* =========================================================
  * GET METADATA → data manager pipeline
  * ========================================================= */
@@ -313,8 +320,8 @@ void acms_web_init(void)
 {
   /* SPIFFS is already mounted and XMLs are provisioned in setup() before
    * wifi_manager_init(), so nothing to do here except register routes. */
-  server.on("/",       HTTP_GET,  handle_root);
-  server.on("/test",   HTTP_GET,  handle_test);
+  server.on("/",      HTTP_GET,  handle_root);
+  server.on("/test",  HTTP_GET,  handle_test);
   server.on("/reboot", HTTP_POST, handle_reboot);
 
   server.on("/Variables.xml", HTTP_GET,  handle_get_xml);
@@ -358,17 +365,20 @@ static void http_task(void *pvParameters)
             ESP.restart();
         }
 
-        taskYIELD();  /* cooperative yield — resumes immediately if no higher-priority task is ready */
+        vTaskDelay(pdMS_TO_TICKS(10));  /* yield for 10 ms — allows loopTask (priority 1) to run
+                                         * wifi_manager_loop() → mqtt.loop() for keepalive */
     }
 }
 
 /* =========================================================
- * INCREMENT TASK — FreeRTOS task, started from acms_system_init()
- * Iterates every constraints table row, adds Increment to *value_ptr,
- * calls update_variable, then sync_all_nochange after each full pass.
+ * POLL TASK — combined Modbus + Increment, single FreeRTOS task.
+ * Each iteration:
+ *   1. Modbus  — poll every row in variables_modbus_table (blocking per-row)
+ *   2. Increment — step every row in increment_pool
+ *   3. sync_all() — publish all dirty classes to MQTT in one pass
  * ========================================================= */
 
-static void increment_task(void *pvParameters)
+static void poll_task(void *pvParameters)
 {
     /* ── resolve metaData type-indicator var IDs once at task start ── */
     uint16_t _meta_cls    = dm_class_map_find("metaData");
@@ -389,6 +399,10 @@ static void increment_task(void *pvParameters)
             xSemaphoreTake(increment_go_sem, portMAX_DELAY); /* wait:  until reload done  */
         }
 
+        /* ── 1. Modbus: poll every table row ── */
+        modbus_poll_all_rows();
+
+        /* ── 2. Increment: step every constraints row ── */
         for (int i = 0; i < increment_pool.count; i++) {
             increment_pool_row_t *r = &increment_pool.rows[i];
             if (r->value_ptr == NULL) continue;
@@ -515,6 +529,7 @@ static void increment_task(void *pvParameters)
             if (_vpid != INVALID_INDEX)
                 check_variable_constraints(_vpid);
         }
+        /* ── 3. Publish all dirty classes to MQTT in one batch ── */
         sync_all();
         vTaskDelay(pdMS_TO_TICKS(INCREMENT_LOOP_INTERVAL_MS));
     }
@@ -588,7 +603,7 @@ void acms_system_init(const char *login_user, const char *login_pass)
   increment_ack_sem = xSemaphoreCreateBinary();
   increment_go_sem  = xSemaphoreCreateBinary();
 
-  xTaskCreate(increment_task, "increment", 4096, NULL, 1, &increment_task_handle);
+  xTaskCreate(poll_task, "poll", 6144, NULL, 3, &increment_task_handle);
   xTaskCreatePinnedToCore(http_task, "http", 8192, NULL, 10, NULL, 1);
 
   Serial.println("Variables registered");
