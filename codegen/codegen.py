@@ -1095,7 +1095,7 @@ def gen_c_schema_h(tables, subcategories=None, settings_subcats=None, settings_f
                     break
             if cooldown_struct:
                 lines.append("static inline float effective_alert_cooldown(void) {")
-                lines.append(f"  /* 0.0f = no dedup  |  > 0.0f = minutes  |  < 0.0f = always suppress */")
+                lines.append(f"  /* empty/-9999 = no dedup  |  0.0f = always suppress  |  > 0.0f = minutes */")
                 lines.append(f"  return {cooldown_struct}.{cooldown_field};")
                 lines.append("}")
                 lines.append("")
@@ -1933,6 +1933,8 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                         for fn in inner_fields:
                             typ = field_map_s.get(fn, "string")
                             ci = c_ident(fn)
+                            _fk = fn.lower().replace("_","").replace("(","").replace(")","").replace(" ","")
+                            _is_cd = "alertcooldown" in _fk
                             lines.append(f'        extract_tag(row_start, "{ci}", buf, sizeof(buf));')
                             if typ == "string":
                                 lines.append(f"        if (settings_{isl}.{ci}) {{ free(settings_{isl}.{ci}); settings_{isl}.{ci} = NULL; }}")
@@ -1943,7 +1945,8 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                                 int_c = C_TYPE_MAP[typ]
                                 lines.append(f"        settings_{isl}.{ci} = buf[0] ? ({int_c})strtol(buf, NULL, 10) : 0;")
                             else:
-                                lines.append(f"        settings_{isl}.{ci} = buf[0] ? (float)atof(buf) : 0.0f;")
+                                _default = "-9999.0f" if _is_cd else "0.0f"
+                                lines.append(f"        settings_{isl}.{ci} = buf[0] ? (float)atof(buf) : {_default};")
                         lines.append("      }")
                         lines.append("")
                     lines.append("    }")
@@ -1953,6 +1956,8 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                     for fn in sc_val:
                         typ = field_map_s.get(fn, "string")
                         ci = c_ident(fn)
+                        _fk = fn.lower().replace("_","").replace("(","").replace(")","").replace(" ","")
+                        _is_cd = "alertcooldown" in _fk
                         lines.append(f'      extract_tag(row_start, "{ci}", buf, sizeof(buf));')
                         if typ == "string":
                             lines.append(f"      if (settings_{sl}.{ci}) {{ free(settings_{sl}.{ci}); settings_{sl}.{ci} = NULL; }}")
@@ -1963,7 +1968,8 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                             int_c = C_TYPE_MAP[typ]
                             lines.append(f"      settings_{sl}.{ci} = buf[0] ? ({int_c})strtol(buf, NULL, 10) : 0;")
                         else:
-                            lines.append(f"      settings_{sl}.{ci} = buf[0] ? (float)atof(buf) : 0.0f;")
+                            _default = "-9999.0f" if _is_cd else "0.0f"
+                            lines.append(f"      settings_{sl}.{ci} = buf[0] ? (float)atof(buf) : {_default};")
                     lines.append("    }")
                 lines.append("")
 
@@ -2029,6 +2035,7 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
             lines.append("  if (var_pool_id == INVALID_INDEX) return false;")
             lines.append("  if (var_pool[var_pool_id].ext_addr == NULL) return false;")
             lines.append("  float _val  = *(float *)var_pool[var_pool_id].ext_addr;")
+            lines.append("  if (var_pool[var_pool_id].constraint_idx == INVALID_INDEX) return false;")
             lines.append("  int   _cid  = (int)var_pool[var_pool_id].constraint_idx;")
             lines.append("  bool  _triggered = false;")
             lines.append("  while (_cid != -1) {")
@@ -2891,8 +2898,8 @@ function loadSettings() {
     if (rewind) rewind.disabled = true;
   }
 
-  /* PC mode: use build-time-embedded content (fetch blocked by CORS on file://) */
-  if (location.hostname === "" && PRELOAD_SETTINGS) {
+  /* Use inline-injected settings when available (ESP: injected at serve time; PC: build-time embed) */
+  if (PRELOAD_SETTINGS) {
     applyXml(PRELOAD_SETTINGS);
     return;
   }
@@ -3194,7 +3201,7 @@ def main():
     with open("generated_page.html", "w") as f:
         f.write(pc_page)
 
-    # ESP version (empty PRELOAD_XML, no embedded settings)
+    # ESP version — single PROGMEM string; data loaded via /preload endpoint at runtime
     esp_page = base.replace("%PRELOAD_XML%", "")
     esp_page = esp_page.replace("%PRELOAD_SETTINGS%", '""')
     with open("web_page.h", "w") as f:
