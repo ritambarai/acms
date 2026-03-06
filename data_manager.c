@@ -129,6 +129,28 @@ void insert_list_item(uint16_t class_idx,uint16_t var_idx)
         return;
 
 }
+static void move_to_head(uint16_t class_idx, uint16_t var_idx)
+{
+    class_t *parent = &class_pool[class_idx];
+    var_t   *node   = &var_pool[var_idx];
+
+    if (parent->head == node) return;   /* already MRU — nothing to do */
+
+    var_t *prev = node->prev;
+    var_t *next = node->next;
+
+    /* unlink from current position */
+    if (prev != DM_PTR_NULL) prev->next = next;
+    if (next != DM_PTR_NULL) next->prev = prev;
+    if (parent->tail == node) parent->tail = prev;
+
+    /* prepend at head */
+    node->prev       = DM_PTR_NULL;
+    node->next       = parent->head;
+    if (parent->head != DM_PTR_NULL) parent->head->prev = node;
+    parent->head     = node;
+}
+
 void remove_from_list(uint16_t class_idx, uint16_t var_idx)
 {
     class_t *parent = &class_pool[class_idx];
@@ -265,14 +287,12 @@ bool update_variable(void *ext_addr)
 
     v->cached_val = current_val;
 
-    /* --------------------------------------------------------
-     * MOVE TO MRU POSITION
-     * -------------------------------------------------------- */
-    //printf("[update_variable] moving to MRU\n");
+    /* Move to head (MRU) so sync_class walks most-recently-changed first. */
+    move_to_head(v->class_idx, var_idx);
 
-    remove_from_list(v->class_idx, var_idx);
-    insert_list_item(v->class_idx, var_idx);
-    //printf("Tail Pointing @ Address   : %u\n", cls->tail->var_idx);
+    /* Mark class dirty so sync_class() picks it up on next sync_all(). */
+    class_mark_dirty(cls);
+    dirty = true;
 
     return true;
 }
@@ -504,52 +524,15 @@ void sync_class(uint16_t class_idx)
 {
     class_t *cls = &class_pool[class_idx];
 
-    /* --------------------------------------------------------
-     * CHECK DIRTY FLAG
-     * -------------------------------------------------------- */
-    if (!cls->dirty) {
-        // printf("[sync_class] class '%s' is clean\n",
-        //        cls->class_name ? cls->class_name : "(null)");
-        return;
+    if (!cls->dirty) return;
+
+    /* Walk tail → head with a local pointer; cls->tail is never modified. */
+    for (var_t *node = cls->tail; node != DM_PTR_NULL; node = node->prev) {
+        json_add_var(node->var_idx);
     }
 
-    /* --------------------------------------------------------
-     * PROCESS CURRENT TAIL NODE
-     * -------------------------------------------------------- */
-    var_t *node = cls->tail;
-
-    if (node == DM_PTR_NULL) {
-        /* ----------------------------------------------------
-         * DONE: ALL VARIABLES PROCESSED
-         * ---------------------------------------------------- */
-        cls->dirty = false;
-
-        // printf("[sync_class] class '%s' fully synced, sending JSON\n",
-        //        cls->class_name ? cls->class_name : "(null)");
-
-        json_send();
-        return;
-    }
-
-    // printf("[sync_class] var '%s' idx=%u value=%f\n",
-    //        node->var_name ? node->var_name : "(null)",
-    //        node->var_idx,
-    //        node->cached_val);
-
-    /* --------------------------------------------------------
-     * ADD VARIABLE TO JSON
-     * -------------------------------------------------------- */
-    json_add_var(node->var_idx);
-
-    /* --------------------------------------------------------
-     * MOVE TAIL BACKWARD (STATEFUL)
-     * -------------------------------------------------------- */
-    cls->tail = node->prev;
-
-    /* --------------------------------------------------------
-     * RECURSE TO PROCESS NEXT VARIABLE
-     * -------------------------------------------------------- */
-    sync_class(class_idx);
+    cls->dirty = false;
+    json_send();
 }
 void sync_all_classVars(uint16_t class_idx)
 {

@@ -427,7 +427,7 @@ static void parse_settings_xml(const char *xml) {
       extract_tag(row_start, "Var_Pool_Size", buf, sizeof(buf));
       settings_general.Var_Pool_Size = buf[0] ? (int32_t)strtol(buf, NULL, 10) : 0;
       extract_tag(row_start, "Alert_Cooldownmins", buf, sizeof(buf));
-      settings_general.Alert_Cooldownmins = buf[0] ? (float)atof(buf) : 0.0f;
+      settings_general.Alert_Cooldownmins = buf[0] ? (float)atof(buf) : -9999.0f;
     }
 
     /* ── mqtt ── */
@@ -501,6 +501,7 @@ bool check_variable_constraints(uint16_t var_pool_id) {
   if (var_pool_id == INVALID_INDEX) return false;
   if (var_pool[var_pool_id].ext_addr == NULL) return false;
   float _val  = *(float *)var_pool[var_pool_id].ext_addr;
+  if (var_pool[var_pool_id].constraint_idx == INVALID_INDEX) return false;
   int   _cid  = (int)var_pool[var_pool_id].constraint_idx;
   bool  _triggered = false;
   while (_cid != -1) {

@@ -273,6 +273,6 @@ static inline int32_t effective_class_pool_size(void) {
 }
 
 static inline float effective_alert_cooldown(void) {
-  /* 0.0f = no dedup  |  > 0.0f = minutes  |  < 0.0f = always suppress */
+  /* empty/-9999 = no dedup  |  0.0f = always suppress  |  > 0.0f = minutes */
   return settings_general.Alert_Cooldownmins;
 }
