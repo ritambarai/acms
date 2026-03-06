@@ -332,8 +332,6 @@ float modbus_regs_to_float(uint16_t hi, uint16_t lo)
     return conv.f;
 }
 
-static void modbus_task(void *pvParameters);   /* forward declaration */
-
 extern bool check_variable_constraints(uint16_t var_pool_id);
 
 /* ═══════════════════════════════════════════════════════════════
@@ -345,7 +343,6 @@ void modbus_setup(void)
     digitalWrite(MODBUS_DE_RE_PIN, LOW);   /* default: receive mode */
     Serial1.begin(MODBUS_BAUD, SERIAL_8N1, MODBUS_RX_PIN, MODBUS_TX_PIN);
     Serial.printf("[Modbus] Table has %d row(s)\n", variables_modbus_table.count);
-    xTaskCreate(modbus_task, "modbus", 4096, NULL, 3, NULL);
     Serial.println("[Modbus] Ready");
 }
 
@@ -406,15 +403,12 @@ static void modbus_poll_row(int row)
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  FreeRTOS task: cycles all rows, then waits MODBUS_POLL_INTERVAL_MS
+ *  PUBLIC: poll every modbus table row once (no sync, no delay).
+ *  Called by the combined poll_task in acms_web.cpp.
  * ════════════════════════════════════════════════════════════ */
-static void modbus_task(void *pvParameters)
+void modbus_poll_all_rows(void)
 {
-    for (;;) {
-        for (int i = 0; i < variables_modbus_table.count; i++) {
-            modbus_poll_row(i);
-        }
-        sync_all();
-        vTaskDelay(pdMS_TO_TICKS(MODBUS_POLL_INTERVAL_MS));
+    for (int i = 0; i < variables_modbus_table.count; i++) {
+        modbus_poll_row(i);
     }
 }

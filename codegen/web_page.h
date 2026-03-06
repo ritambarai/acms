@@ -1322,8 +1322,8 @@ function loadSettings() {
     if (rewind) rewind.disabled = true;
   }
 
-  /* PC mode: use build-time-embedded content (fetch blocked by CORS on file://) */
-  if (location.hostname === "" && PRELOAD_SETTINGS) {
+  /* Use inline-injected settings when available (ESP: injected at serve time; PC: build-time embed) */
+  if (PRELOAD_SETTINGS) {
     applyXml(PRELOAD_SETTINGS);
     return;
   }
