@@ -295,11 +295,11 @@ void add_alert_queue(uint16_t var_id, uint16_t constraint_id)
             bool suppress;
 
             if (dedup_m < 0.0f) {
-                /* Negative → always suppress duplicates (infinite cooldown) */
-                suppress = true;
-            } else if (dedup_m == 0.0f) {
-                /* Zero → no deduplication, every trigger enqueued */
+                /* Negative (-9999 default) → no deduplication, every trigger enqueued */
                 suppress = false;
+            } else if (dedup_m == 0.0f) {
+                /* Zero → always suppress duplicates (infinite cooldown) */
+                suppress = true;
             } else {
                 float elapsed_s = (float)(tmp.timestamp - last->timestamp);
                 suppress = (elapsed_s < dedup_m * 60.0f);

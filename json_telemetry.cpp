@@ -174,11 +174,6 @@ void json_send(void)
         return;
     }
 
-    if (!mqtt_manager_connected()) {
-        Serial.println("[MQTT] Not connected, JSON dropped");
-        return;
-    }
-
     if (doc.isNull() || doc.size() == 0) {
         //Serial.println("⚠️ JSON empty, nothing to send");
         return;
@@ -193,10 +188,7 @@ void json_send(void)
     //Serial.println(payload.length());
 
     bool ok = mqtt_manager_publish(settings_mqtt.Data_Topic, payload.c_str(), true);
-
-    if (ok) {
-        Serial.println("[MQTT] Publish OK");
-    } else {
+    if (!ok) {
         Serial.println("[MQTT] Publish FAILED");
     }
 }
@@ -420,11 +412,6 @@ void json_send_alert(const char *class_name,
 {
     if (WiFi.status() != WL_CONNECTED) {
         Serial.println("[MQTT] Not connected, alert dropped");
-        return;
-    }
-
-    if (!mqtt_manager_connected_alert()) {
-        Serial.println("[MQTT] Alert client not connected, alert dropped");
         return;
     }
 

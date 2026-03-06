@@ -24,8 +24,8 @@
 <row><Class>state</Class><Key>1</Key><Message>ON</Message></row>
 <row><Class>status</Class><Key>0</Key><Message>OK</Message></row>
 <row><Class>status</Class><Key>1</Key><Message>FAULT</Message></row>
-<row><Class>trip</Class><Key>0</Key><Message>FALSE</Message></row>
-<row><Class>trip</Class><Key>1</Key><Message>TRUE</Message></row>
+<row><Class>trip</Class><Key>0</Key><Message>UNTRIPED</Message></row>
+<row><Class>trip</Class><Key>1</Key><Message>TRIPED</Message></row>
 <row><Class>type</Class><Key>0</Key><Message>choice</Message></row>
 <row><Class>type</Class><Key>1</Key><Message>numeric</Message></row>
 <row><Class>voltage</Class><Key>1</Key><Message>Volts</Message></row>
