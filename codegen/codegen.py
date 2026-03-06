@@ -1935,7 +1935,7 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                             ci = c_ident(fn)
                             _fk = fn.lower().replace("_","").replace("(","").replace(")","").replace(" ","")
                             _is_cd = "alertcooldown" in _fk
-                            lines.append(f'        extract_tag(row_start, "{ci}", buf, sizeof(buf));')
+                            lines.append(f'        extract_tag(row_start, "{fn}", buf, sizeof(buf));')
                             if typ == "string":
                                 lines.append(f"        if (settings_{isl}.{ci}) {{ free(settings_{isl}.{ci}); settings_{isl}.{ci} = NULL; }}")
                                 lines.append(f"        if (buf[0]) settings_{isl}.{ci} = strdup(buf);")
@@ -1958,7 +1958,7 @@ def gen_c_xml_parser(tables, subcategories=None, xml_map=None, always_overwrite=
                         ci = c_ident(fn)
                         _fk = fn.lower().replace("_","").replace("(","").replace(")","").replace(" ","")
                         _is_cd = "alertcooldown" in _fk
-                        lines.append(f'      extract_tag(row_start, "{ci}", buf, sizeof(buf));')
+                        lines.append(f'      extract_tag(row_start, "{fn}", buf, sizeof(buf));')
                         if typ == "string":
                             lines.append(f"      if (settings_{sl}.{ci}) {{ free(settings_{sl}.{ci}); settings_{sl}.{ci} = NULL; }}")
                             lines.append(f"      if (buf[0]) settings_{sl}.{ci} = strdup(buf);")
