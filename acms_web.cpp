@@ -399,8 +399,15 @@ static void poll_task(void *pvParameters)
             xSemaphoreTake(increment_go_sem, portMAX_DELAY); /* wait:  until reload done  */
         }
 
-        /* ── 1. Modbus: poll every table row ── */
-        modbus_poll_all_rows();
+        /* ── 1. Modbus: poll each row; check pause before every row so
+         * http_task never waits more than one row timeout (~500 ms). ── */
+        for (int _mi = 0; _mi < variables_modbus_table.count; _mi++) {
+            if (increment_pause_req && increment_ack_sem && increment_go_sem) {
+                xSemaphoreGive(increment_ack_sem);
+                xSemaphoreTake(increment_go_sem, portMAX_DELAY);
+            }
+            modbus_poll_one_row(_mi);
+        }
 
         /* ── 2. Increment: step every constraints row ── */
         for (int i = 0; i < increment_pool.count; i++) {

@@ -349,7 +349,7 @@ void modbus_setup(void)
 /* ═══════════════════════════════════════════════════════════════
  *  INTERNAL: poll one table row — blocking, runs inside FreeRTOS task
  * ════════════════════════════════════════════════════════════ */
-static void modbus_poll_row(int row)
+void modbus_poll_one_row(int row)
 {
     variables_modbus_row_t *r = &variables_modbus_table.rows[row];
     Serial.printf("[Modbus] Querying row %d  Slave=%d  FC=%d  Addr=%d  Len=%d\n",
@@ -402,13 +402,7 @@ static void modbus_poll_row(int row)
     }
 }
 
-/* ═══════════════════════════════════════════════════════════════
- *  PUBLIC: poll every modbus table row once (no sync, no delay).
- *  Called by the combined poll_task in acms_web.cpp.
- * ════════════════════════════════════════════════════════════ */
-void modbus_poll_all_rows(void)
-{
-    for (int i = 0; i < variables_modbus_table.count; i++) {
-        modbus_poll_row(i);
-    }
-}
+/* modbus_poll_one_row() is public — declared in modbus_manager.h.
+ * The per-row loop (with pause-check between rows) lives in poll_task
+ * in acms_web.cpp so it can respond to increment_pause_req within
+ * one row timeout (~500 ms) rather than a full table pass. */
