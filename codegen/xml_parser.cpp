@@ -426,7 +426,7 @@ static void parse_settings_xml(const char *xml) {
       settings_general.Class_Pool_Size = buf[0] ? (int32_t)strtol(buf, NULL, 10) : 0;
       extract_tag(row_start, "Var_Pool_Size", buf, sizeof(buf));
       settings_general.Var_Pool_Size = buf[0] ? (int32_t)strtol(buf, NULL, 10) : 0;
-      extract_tag(row_start, "Alert_Cooldownmins", buf, sizeof(buf));
+      extract_tag(row_start, "Alert_Cooldown(mins)", buf, sizeof(buf));
       settings_general.Alert_Cooldownmins = buf[0] ? (float)atof(buf) : -9999.0f;
     }
 
