@@ -68,9 +68,10 @@ extern uint16_t Data_Size;            /* count of values in last frame */
 /* Call once from setup() — inits UART and DE/RE pin. */
 void modbus_setup(void);
 
-/* Poll every row in variables_modbus_table once (blocking, no sync/delay).
- * Called by the combined poll_task in acms_web.cpp. */
-void modbus_poll_all_rows(void);
+/* Poll a single row from variables_modbus_table (blocking, no sync/delay).
+ * The caller (poll_task in acms_web.cpp) loops over rows and checks
+ * increment_pause_req between each one for fast submit response. */
+void modbus_poll_one_row(int row_idx);
 
 /* Send an ad-hoc Modbus query (master mode).
  * modbus_loop() will parse the response on the next frame. */
