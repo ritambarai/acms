@@ -1,6 +1,6 @@
 # ACMS Metadata
 
-A lightweight metadata editor for ACMS XML files, served locally via a Python HTTP server.
+A local server for system integrators to initiate a new ACMS project — create a metadata XML file and link it with an edge board ID.
 
 ## Files
 
