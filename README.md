@@ -11,7 +11,6 @@ A local server for system integrators to initiate a new ACMS project — create 
 | `style.css` | Stylesheet for the UI |
 | `app.js` | Frontend logic |
 | `config.xml` | Configuration metadata |
-| `metadata.xml` | Core metadata definitions |
 | `field_value.xml` | Field value definitions |
 
 ## Usage
