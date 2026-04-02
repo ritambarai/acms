@@ -236,7 +236,7 @@ void wifi_manager_loop(void)
         bool needs_reconnect = !mqtt.connected() || (dual_mqtt && !mqtt_alert.connected());
         if (needs_reconnect) {
             static uint32_t last_reconnect = 0;
-            if (millis() - last_reconnect > 30000) {
+            if (millis() - last_reconnect > 5000) {
                 last_reconnect = millis();
                 mqtt_manager_connect();
             }
@@ -323,7 +323,11 @@ bool mqtt_manager_publish(const char *topic, const char *payload, bool retain)
     if (!s_mqtt_mutex) return false;
     bool ok = false;
     if (xSemaphoreTake(s_mqtt_mutex, portMAX_DELAY) == pdTRUE) {
-        ok = mqtt.publish(topic, payload, retain);
+        if (!mqtt.connected()) {
+            Serial.printf("[MQTT] Publish skipped — disconnected (state=%d)\n", mqtt.state());
+        } else {
+            ok = mqtt.publish(topic, payload, retain);
+        }
         xSemaphoreGive(s_mqtt_mutex);
     }
     return ok;
